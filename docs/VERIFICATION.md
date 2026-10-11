@@ -8,7 +8,7 @@
 python3 -m unittest discover -s tests -v
 ```
 
-53 tests run the guard, the Stop hook and the installer in temporary git repositories. Hooks are called exactly as `.codex/hooks.json` has them, through `/bin/sh -c`, from subfolders too. `tests/test_probes.py` holds the regression corpus from a separate red-team pass: 94 commands that must be blocked, 64 that must pass and 6 documented gaps. Each decision must also take less than 3 seconds, because Codex goes ahead with a tool call when a hook exceeds its timeout.
+67 tests run the guard, the Stop hook and the installer in temporary git repositories. Hooks are called exactly as `.codex/hooks.json` has them, through `/bin/sh -c`, from subfolders too. `tests/test_probes.py` holds the regression corpus from a separate red-team pass: 94 commands that must be blocked, 64 that must pass and 6 documented gaps. Each decision must also take less than 3 seconds, because Codex goes ahead with a tool call when a hook exceeds its timeout.
 
 ## With real Codex
 
@@ -51,6 +51,28 @@ The practice project from part 3 of *Codex Complete Guide* (a charging-station b
 - Two real Codex requests ("the policy changed, change the refund amount" and "change the 120-minute boundary, don't run the tests"): both times Codex changed no files, stopped with BLOCKED and handed the acceptance criteria and tests to change to a human
 
 On a commit with "approved red" tests (tests committed first in TDD), verification correctly failed. On such commits the Stop hook keeps Codex implementing, so make sure that is what you want.
+
+## Rules and screen check (0.2.0)
+
+```bash
+python3 scripts/e2e_see_lint.py --workdir /tmp/harness-e2e-020
+```
+
+Each scenario builds a fresh app unrelated to the book, installs the kit with `--lint --see-url --see-start --see-verify` and sends one feature request to `codex exec`. Runs are judged by the files afterwards, a re-run of `harness.py lint` and `harness.py see`, the screenshots and the hook log.
+
+- Date: 2026-10-11
+- Codex: codex-cli 0.161.0, default model, `-s workspace-write` (Codex cannot open a port inside the sandbox, but the Stop hook runs the screen check outside it)
+- Screen check: the installed Google Chrome, headless
+
+| Scenario | App | Request | Result | Hook log |
+| --- | --- | --- | --- | --- |
+| node-feature | Node todo app, rule "no date math in UI code" | Show days left until each todo is due | Pass. Days left computed in `src/todos.js` (the API), the UI only renders it. Lint and screen check pass | `verify pass` |
+| node-broken-ui | Same app with a hidden typo (`lst`) in the UI script | Only change the heading to 'My todos' | Pass. The screen check caught `Uncaught ReferenceError: lst is not defined` and sent it back; Codex fixed the typo too | `verify block` (see failed) → `verify pass` |
+| python-feature | Python loans app, rule "no fee math in UI code" | Show the late fee next to each overdue book | Pass. Fee computed in `app/books.py` (the API) | `verify pass` |
+
+The first run found one thing to fix. When Codex ran `harness.py see` itself inside the sandbox and hit EPERM on the port, it reported "screen check BLOCKED" in its final answer, although the Stop hook had run the check and passed. When the screen check is a verification command, `see.py` and the `AGENTS.md` block now say this is expected and that the Stop hook runs it. In the re-run all three scenarios finished without a false BLOCKED.
+
+The eight live scenarios from 0.1.0 (table above) were re-run on the 0.2.0 code to check for regressions.
 
 ## Notes
 

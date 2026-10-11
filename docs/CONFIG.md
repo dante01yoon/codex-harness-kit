@@ -62,3 +62,53 @@ An agent can also pass by loosening the checks instead of the tests. If that wor
 ```
 
 If verification takes long, raise `verify.total_timeout` and run the installer again. The Stop hook timeout changes, so trust the hooks again. When a command cannot be found (exit code 127, `command not found`) or a Python module is missing (`No module named`), it is treated as an environment problem, not an implementation problem: Codex is not sent back, and a warning is left.
+
+## Example: project rules (`lint`, 0.2)
+
+```json
+"lint": {
+  "rules": [
+    {
+      "id": "ui-no-money-math",
+      "files": ["ui/**/*.ts", "src/components/**/*.tsx"],
+      "exclude": ["**/*.test.*"],
+      "forbid": "\\b(refund|fee|price)\\w*\\s*[-+*/]",
+      "why": "Money is decided in src/rules. Computing it in the UI drifts from the rules.",
+      "fix": "Call the function in src/rules and render only its result."
+    }
+  ]
+}
+```
+
+- `files` and `exclude` are path patterns; `forbid` is a regex that must not appear in those files.
+- Write `why` and `fix` so Codex can read them and repair the code itself. A violation prints `file:line:col [rule] why` and `fix: ...`.
+- To allow a single line, add a comment with `harness-lint-ignore: <rule id>` and a reason.
+- In a project that already has many violations, a person runs `harness.py lint --baseline` to record them in `.codex/harness/lint-baseline.json`; afterwards only new violations fail. Codex is blocked from running it.
+- To run it during verification, install with `--lint` or add `python3 .codex/harness/harness.py lint` to `verify.commands`.
+
+## Example: screen check (`see`, 0.2)
+
+```json
+"see": {
+  "url": "http://127.0.0.1:5173",
+  "start": "npm run dev -- --port 5173",
+  "pages": [{"name": "home", "path": "/"}, {"name": "bookings", "path": "/bookings"}],
+  "viewports": ["390x844", "1280x900"],
+  "out": "artifacts/harness/see",
+  "wait_ms": 2500,
+  "log": ""
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `url` | The app's address. Reused when it is already up |
+| `start` | Command that starts the app when it is not up; stopped again afterwards |
+| `pages` | Screens to check. `name` becomes the screenshot file name |
+| `viewports` | Window sizes. Default: phone (390x844) and desktop (1280x900) |
+| `out` | Folder for screenshots, `summary.txt` and the server log. Must be outside `.codex` |
+| `wait_ms` | Time scripts get to render |
+| `log` | The app's own log file, if it writes one (empty: `out/server.log`) |
+| `chrome` | Path to Chrome/Chromium (empty: auto-detect) |
+
+It fails on a page that does not answer (HTTP 4xx/5xx), an uncaught script error, a failed resource load or a console error. Whether a screenshot looks right is for Codex to judge by opening it.

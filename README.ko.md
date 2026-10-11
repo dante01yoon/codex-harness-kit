@@ -2,7 +2,7 @@
 
 [English](README.md) | **한국어**
 
-코덱스(Codex)가 **테스트와 검증 기준을 건드리지 못하게 하고**, **일을 끝내기 전에 반드시 검증하게** 만드는 프로젝트용 하네스 키트입니다. 명령 한 줄로 설치하면 다음 장치가 프로젝트에 붙습니다.
+코덱스(Codex)가 **테스트와 검증 기준을 건드리지 못하게 하고**, **일을 끝내기 전에 반드시 검증하게** 하며, **자기가 만든 화면을 직접 보고 프로젝트 규칙대로 고치게** 만드는 프로젝트용 하네스 키트입니다. 명령 한 줄로 설치하면 다음 장치가 프로젝트에 붙습니다.
 
 | 역할 | 장치 | 하는 일 |
 | --- | --- | --- |
@@ -11,6 +11,10 @@
 | 확인하기 | Stop 훅 `verify.py` | 코덱스가 응답을 마치기 전에 테스트와 타입 검사를 돌리고, 실패하면 이어서 고치게 합니다 |
 | 알아차리기 | 턴 시작·끝의 보호 파일 비교 | 스크립트나 MCP 도구처럼 가드가 보지 못한 경로로 보호 파일이 바뀌면, 턴이 끝날 때 멈추고 보고하게 합니다 |
 | 멈추기 | 반복 한도 | 검증이 계속 실패하거나 코덱스가 `BLOCKED`로 사람에게 넘기면, 더 시키지 않고 경고를 남깁니다 |
+| 규칙 검사 (0.2, 선택) | `harness.py lint` | 프로젝트 규칙(예: 화면 코드에서 금액·날짜를 계산하지 않기)을 검사하고, 위반한 파일·줄과 **고치는 법**을 코덱스에게 돌려줍니다 |
+| 보기 (0.2, 선택) | `harness.py see` | 앱을 띄워 화면별 스크린샷을 찍고 콘솔 오류·실패한 요청·서버 로그를 모읍니다. 검증에 넣으면 화면이 깨진 채로 끝내지 못합니다 |
+
+막기와 확인하기는 코덱스가 기준을 어기지 못하게 하고, 규칙 검사와 보기는 코덱스가 **스스로 확인하고 고칠 수 있게** 합니다. 오픈AI가 [하네스 엔지니어링 글](https://openai.com/index/harness-engineering/)에서 소개한 방법과 같은 방향입니다. 앱 화면과 로그를 에이전트가 직접 읽게 하고, 직접 만든 린트의 오류 메시지에 수정 방법을 넣어 에이전트에게 돌려주는 방식이죠.
 
 『코덱스 완벽 가이드』 14장 '에이전트의 작업 환경을 설계하는 하네스 엔지니어링'에서 손으로 만든 하네스를, 어떤 프로젝트에나 설치할 수 있게 다듬은 것입니다. 파이썬 3.9 표준 라이브러리만 쓰고, 다른 패키지는 설치하지 않습니다.
 
@@ -35,6 +39,15 @@
 코덱스: 정확히 120분이면 3,000원이어야 해서 >= 로 되돌렸습니다. 검증 통과, 테스트와 설정은 바꾸지 않았습니다.
 ```
 
+**제목만 바꿔 달라고 했는데**, 화면 확인이 콘솔 오류를 잡아 코덱스가 함께 고칩니다(0.2, 책과 무관한 새 Node 앱).
+
+```text
+나: 페이지 제목을 'Todos'에서 'My todos'로 바꿔 줘. 다른 건 건드리지 마
+코덱스: 제목을 바꿨습니다.
+훅: 응답을 마치기 전에 검증을 실행했는데 실패했습니다. ... [FAIL] page home ... Uncaught ReferenceError: lst is not defined (app.js:6)
+코덱스: 제목을 'My todos'로 바꿨고, 검증이 알려 준 ui/app.js의 lst 오타도 list로 고쳤습니다. 테스트·린트·화면 확인 통과.
+```
+
 ## 빠른 시작
 
 ```bash
@@ -55,6 +68,18 @@ python3 .codex/harness/harness.py test     # 막아야 할 예시는 막고, 통
 
 - 앱: [Settings > Hooks]에서 프로젝트를 누르고, 명령(Command)이 이 프로젝트의 `.codex/harness/guard.py`와 `verify.py`를 실행하는지 확인한 뒤 [Trust all]
 - CLI: `/hooks`
+
+### 규칙 검사와 화면 확인 켜기 (0.2)
+
+```bash
+python3 codex-harness-kit/install.py ~/projects/my-app --lint \
+  --see-url http://127.0.0.1:5173 --see-start "npm run dev" --see-verify
+```
+
+- `--lint`: `harness.json`의 `lint.rules`를 응답을 마치기 전에 검사합니다. 규칙은 `files`(적용할 파일), `forbid`(나오면 안 되는 정규식), `why`(이유), `fix`(고치는 법)로 씁니다. 이미 있는 프로젝트라면 사람이 `harness.py lint --baseline`으로 지금 있는 위반을 기록해 두고 새 위반만 막을 수 있습니다(코덱스는 이 명령을 실행할 수 없습니다).
+- `--see-url`, `--see-start`: 화면 확인을 켭니다. 앱이 떠 있지 않으면 시작 명령으로 띄우고, 끝나면 다시 끕니다. 확인할 화면은 `see.pages`에 적습니다. 설치된 Chrome·Chromium·Edge를 headless로 쓰므로 따로 설치할 것이 없습니다.
+- `--see-verify`: 화면 확인을 Stop 훅 검증에 넣습니다. 코덱스 기본 샌드박스 안에서는 코덱스가 직접 포트를 열 수 없지만, Stop 훅은 샌드박스 밖에서 돌기 때문에 이 검증은 동작합니다.
+- 스크린샷과 로그는 `artifacts/harness/see/`에 저장되고 `.gitignore`에 들어갑니다. 코덱스 샌드박스가 `.codex/` 쓰기를 막기 때문에 결과는 `.codex` 밖에 둡니다.
 
 `.codex/`와 `AGENTS.md`를 커밋해 두면 같은 저장소를 쓰는 사람도 같은 하네스를 씁니다(신뢰는 사람마다 한 번씩 해야 합니다).
 
@@ -95,6 +120,9 @@ python3 .codex/harness/harness.py check --bash "rm -rf tests"  # 이 명령이 �
 python3 .codex/harness/harness.py verify                       # 검증 명령을 지금 실행
 python3 .codex/harness/harness.py log -n 20                    # 최근 기록
 python3 .codex/harness/harness.py ci --base origin/main        # 보호 파일이 바뀐 브랜치면 실패(CI용)
+python3 .codex/harness/harness.py lint                         # 프로젝트 규칙 검사(0.2)
+python3 .codex/harness/harness.py lint --baseline              # 사람만: 지금 있는 위반을 기존 위반으로 기록(0.2)
+python3 .codex/harness/harness.py see                          # 앱을 띄워 스크린샷·콘솔 오류·서버 로그 수집(0.2)
 ```
 
 훅은 내 컴퓨터에서만 동작하므로, 공유 저장소라면 CI에서도 확인하세요. GitHub Actions 예시입니다.
@@ -111,8 +139,9 @@ python3 .codex/harness/harness.py ci --base origin/main        # 보호 파일�
 
 ## 품질과 검증
 
-- **단위 테스트 53개**(`python3 -m unittest discover -s tests`): 가드·검증 훅·설치기를 임시 git 저장소에서 실제로 실행합니다. 훅은 `hooks.json`에 적힌 명령 그대로, 하위 폴더에서도 부릅니다. 이 가운데 회귀 코퍼스(`tests/test_probes.py`)에는 별도의 레드팀 점검에서 나온 막아야 할 명령 94개, 통과해야 할 명령 64개, 알려진 한계 6개가 들어 있고, 판단 하나가 3초 안에 끝나는지도 확인합니다.
+- **단위 테스트 67개**(`python3 -m unittest discover -s tests`): 가드·검증 훅·설치기를 임시 git 저장소에서 실제로 실행합니다. 훅은 `hooks.json`에 적힌 명령 그대로, 하위 폴더에서도 부릅니다. 이 가운데 회귀 코퍼스(`tests/test_probes.py`)에는 별도의 레드팀 점검에서 나온 막아야 할 명령 94개, 통과해야 할 명령 64개, 알려진 한계 6개가 들어 있고, 판단 하나가 3초 안에 끝나는지도 확인합니다.
 - **실제 코덱스로 확인**(`scripts/e2e_codex.py`): 일회용 프로젝트에 설치하고 `codex exec`로 테스트 수정, 비밀 값 입력, 하네스 끄기, 테스트 없이 버그 넣기, 몰래 테스트를 고치는 스크립트 실행을 시켜 봅니다. 결과는 [VERIFICATION.md](docs/VERIFICATION.ko.md)에 있습니다.
+- **규칙 검사·화면 확인을 실제 코덱스로 확인**(`scripts/e2e_see_lint.py`, 0.2): 책과 무관한 새 Node 할 일 앱과 Python 대출 앱을 매번 만들어 설치하고, 기능을 요청합니다. 세 시나리오 모두 통과했고, 제목만 바꿔 달라는 요청에서 화면 확인이 콘솔 오류를 잡아 코덱스가 함께 고쳤습니다.
 - **CI**: Ubuntu와 macOS, 파이썬 3.9와 3.12에서 테스트와 모든 프리셋 예시를 돌립니다.
 
 ## 다른 도구와 함께 쓰기
@@ -136,7 +165,8 @@ python3 codex-harness-kit/install.py ~/projects/my-app --uninstall --purge   # �
 ## 요구 사항
 
 - 파이썬 3.9 이상(macOS 기본 `python3`로 충분), git
-- 훅을 지원하는 코덱스 CLI 또는 챗GPT 앱의 코덱스. 실제 동작은 macOS의 코덱스 CLI 0.161.0에서 확인했습니다. Windows는 `commandWindows` 설정을 넣어 두었지만 확인하지 않았습니다.
+- 화면 확인(`see`)을 쓰려면 Chrome, Chromium, Edge 가운데 하나(headless로 실행합니다)
+- 훅을 지원하는 코덱스 CLI 또는 챗GPT 앱의 코덱스. 실제 동작은 macOS의 코덱스 CLI 0.161.0에서 확인했습니다. Windows는 `commandWindows` 설정을 넣어 두었지만 확인하지 않았습니다. 코덱스 이슈 [#24453](https://github.com/openai/codex/issues/24453)에 따르면 Windows에서는 셸 명령에 PreToolUse 훅이 발생하지 않을 수 있으니, Windows에서는 턴 끝 보호 파일 비교와 CI 검사에 기대세요.
 
 ## 라이선스
 

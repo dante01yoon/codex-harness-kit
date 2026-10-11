@@ -225,6 +225,16 @@ def cmd_ci(args) -> int:
     return 0
 
 
+def cmd_lint(args) -> int:
+    import lint
+    return lint.main(["--baseline"] if args.baseline else [])
+
+
+def cmd_see(args) -> int:
+    import see
+    return see.main([])
+
+
 def cmd_doctor(args) -> int:
     root = hl.project_root()
     rows: List[tuple] = []
@@ -267,6 +277,19 @@ def cmd_doctor(args) -> int:
                     got = "block" if evaluate(cfg, root, kind, item.get("patch") or item.get("bash") or "") else "allow"
                     bad += got != expect
             rows.append((OK if not bad else FAIL, f"{n - bad}/{n} examples behave as expected (details: harness.py test)"))
+    if cfg:
+        nrules = len(cfg.get("lint", {}).get("rules", []))
+        if nrules:
+            rows.append((OK, f"lint: {nrules} project rules (run: harness.py lint)"))
+        if cfg.get("see", {}).get("url"):
+            import see as see_mod
+            chrome = see_mod.find_chrome(cfg)
+            rows.append((OK if chrome else WARN, f"see: browser {chrome}" if chrome
+                         else "see: Chrome/Chromium not found; set see.chrome"))
+            out = cfg["see"].get("out", "")
+            ign = subprocess.run(["git", "check-ignore", "-q", os.path.join(out, "x.png")], cwd=root,
+                                 capture_output=True).returncode == 0 if groot else True
+            rows.append((OK if ign else WARN, f"see: {out}/ is git-ignored" if ign else f"see: add {out}/ to .gitignore"))
     rows += run_hooks(root, cfg)
     ign = subprocess.run(["git", "check-ignore", "-q", ".codex/harness/logs/events.jsonl"], cwd=root,
                          capture_output=True).returncode == 0 if groot else True
@@ -292,6 +315,10 @@ def main(argv: List[str]) -> int:
     ci = sub.add_parser("ci", help="fail if protected paths changed since --base")
     ci.add_argument("--base", default="origin/main")
     ci.set_defaults(fn=cmd_ci)
+    li = sub.add_parser("lint", help="check project rules (lint.rules) and print fixes for the agent")
+    li.add_argument("--baseline", action="store_true", help="record today's violations as known (person only)")
+    li.set_defaults(fn=cmd_lint)
+    sub.add_parser("see", help="start the app if needed, take screenshots, collect console errors").set_defaults(fn=cmd_see)
     lg = sub.add_parser("log")
     lg.add_argument("-n", type=int, default=20)
     lg.set_defaults(fn=cmd_log)

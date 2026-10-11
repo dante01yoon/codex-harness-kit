@@ -199,6 +199,9 @@ DEFAULTS: Dict[str, Any] = {
         "check_protected_changes": True,
     },
     "log": {"enabled": True, "path": ".codex/harness/logs/events.jsonl", "max_bytes": 1000000},
+    "lint": {"rules": []},
+    "see": {"url": "", "start": "", "pages": [{"name": "home", "path": "/"}], "viewports": ["390x844", "1280x900"],
+            "out": "artifacts/harness/see", "wait_ms": 2500, "chrome": "", "log": "", "start_timeout": 60, "log_tail": 30},
     "examples": {"block": [], "allow": []},
 }
 
@@ -257,6 +260,30 @@ def validate(cfg: Dict[str, Any]) -> List[str]:
     want(isinstance(t, int) and 10 <= t <= 3600, "verify.total_timeout must be 10..3600 seconds")
     m = v.get("max_continuations_per_turn")
     want(isinstance(m, int) and 0 <= m <= 10, "verify.max_continuations_per_turn must be 0..10")
+    rules = cfg.get("lint", {}).get("rules")
+    if not isinstance(rules, list):
+        errs.append("lint.rules must be a list")
+    else:
+        for i, r in enumerate(rules):
+            ok = isinstance(r, dict) and isinstance(r.get("id"), str) and isinstance(r.get("forbid"), str) \
+                and isinstance(r.get("files"), list) and all(isinstance(x, str) for x in r["files"])
+            if not ok:
+                errs.append(f"lint.rules[{i}] needs string 'id', string 'forbid' and a list 'files'")
+                continue
+            try:
+                re.compile(r["forbid"])
+            except re.error as e:
+                errs.append(f"lint.rules[{i}] ({r['id']}): bad regex: {e}")
+    see = cfg.get("see", {})
+    out = str(see.get("out", ""))
+    norm = os.path.normpath(out.replace("\\", "/")).replace(os.sep, "/")
+    want(not (norm == ".codex" or norm.startswith(".codex/")),
+         "see.out must be outside .codex/ (the Codex sandbox cannot write there)")
+    for vp in see.get("viewports", []):
+        want(isinstance(vp, str) and re.match(r"^\d{2,5}x\d{2,5}$", vp) is not None, f"see.viewports: '{vp}' must look like 390x844")
+    pages = see.get("pages", [])
+    want(isinstance(pages, list) and all(isinstance(p, dict) and isinstance(p.get("name"), str) and re.match(r"^[\w.-]+$", p["name"]) for p in pages),
+         "see.pages must be a list of {name, path} with simple names")
     return errs
 
 
