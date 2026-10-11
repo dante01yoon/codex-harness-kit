@@ -25,11 +25,15 @@ app yourself and keep it running.
 """
 from __future__ import annotations
 
+import base64
+import json
 import os
 import re
 import shlex
 import shutil
 import signal
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -124,12 +128,232 @@ def tail(path: str, n: int) -> List[str]:
         return []
 
 
-def shoot(chrome: str, url: str, w: int, h: int, png: str, wait_ms: int) -> Tuple[bool, List[str]]:
+class WebSocket:
+    """The smallest WebSocket client that can talk to Chrome's DevTools endpoint (RFC 6455, text frames)."""
+
+    def __init__(self, url: str, timeout: float) -> None:
+        m = re.match(r"ws://([^/:]+):(\d+)(/.*)", url)
+        if not m:
+            raise OSError(f"bad DevTools URL {url}")
+        self.sock = socket.create_connection((m.group(1), int(m.group(2))), timeout=timeout)
+        key = base64.b64encode(os.urandom(16)).decode()
+        self.sock.sendall((f"GET {m.group(3)} HTTP/1.1\r\nHost: {m.group(1)}:{m.group(2)}\r\n"
+                           f"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
+                           "Sec-WebSocket-Version: 13\r\n\r\n").encode())
+        head = b""
+        while b"\r\n\r\n" not in head:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                raise OSError("DevTools closed the connection during the handshake")
+            head += chunk
+        if b" 101 " not in head.split(b"\r\n", 1)[0]:
+            raise OSError("DevTools refused the WebSocket: " + head.split(b"\r\n", 1)[0].decode(errors="replace"))
+        self.buf = head.split(b"\r\n\r\n", 1)[1]
+
+    def _read(self, n: int) -> bytes:
+        while len(self.buf) < n:
+            chunk = self.sock.recv(max(65536, n - len(self.buf)))
+            if not chunk:
+                raise OSError("DevTools connection closed")
+            self.buf += chunk
+        out, self.buf = self.buf[:n], self.buf[n:]
+        return out
+
+    def _frame(self, opcode: int, payload: bytes) -> None:
+        mask = os.urandom(4)
+        n = len(payload)
+        head = bytes([0x80 | opcode])
+        if n < 126:
+            head += bytes([0x80 | n])
+        elif n < 65536:
+            head += bytes([0x80 | 126]) + struct.pack(">H", n)
+        else:
+            head += bytes([0x80 | 127]) + struct.pack(">Q", n)
+        self.sock.sendall(head + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+
+    def send(self, text: str) -> None:
+        self._frame(0x1, text.encode())
+
+    def recv(self) -> str:
+        message = b""
+        while True:
+            b1, b2 = self._read(2)
+            n = b2 & 0x7F
+            if n == 126:
+                n = struct.unpack(">H", self._read(2))[0]
+            elif n == 127:
+                n = struct.unpack(">Q", self._read(8))[0]
+            mask = self._read(4) if b2 & 0x80 else b""
+            data = self._read(n)
+            if mask:
+                data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+            opcode = b1 & 0x0F
+            if opcode == 0x8:
+                raise OSError("DevTools closed the connection")
+            if opcode == 0x9:
+                self._frame(0xA, data)
+                continue
+            if opcode in (0x0, 0x1, 0x2):
+                message += data
+                if b1 & 0x80:
+                    return message.decode("utf-8", errors="replace")
+
+    def close(self) -> None:
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
+class DevTools:
+    def __init__(self, ws: WebSocket) -> None:
+        self.ws = ws
+        self.next_id = 0
+        self.events: List[Dict[str, Any]] = []
+
+    def call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        self.next_id += 1
+        my_id = self.next_id
+        self.ws.send(json.dumps({"id": my_id, "method": method, "params": params or {}}))
+        while True:
+            msg = json.loads(self.ws.recv())
+            if msg.get("id") == my_id:
+                if "error" in msg:
+                    raise OSError(f"{method}: {msg['error'].get('message')}")
+                return msg.get("result", {})
+            if "method" in msg:
+                self.events.append(msg)
+
+    def pump(self, seconds: float, until: str = "") -> bool:
+        end = time.time() + seconds
+        while time.time() < end:
+            self.ws.sock.settimeout(max(0.05, end - time.time()))
+            try:
+                msg = json.loads(self.ws.recv())
+            except socket.timeout:
+                break
+            if "method" in msg:
+                self.events.append(msg)
+                if until and msg["method"] == until:
+                    return True
+        return False
+
+
+def _remote_text(arg: Dict[str, Any]) -> str:
+    if "value" in arg:
+        return arg["value"] if isinstance(arg["value"], str) else json.dumps(arg["value"], ensure_ascii=False)
+    return arg.get("description") or arg.get("unserializableValue") or arg.get("type", "")
+
+
+def console_lines(events: List[Dict[str, Any]]) -> List[str]:
+    """Turn DevTools events into the same `text  (source:line)` lines the CLI log used to give."""
+    lines = []
+    for e in events:
+        p = e.get("params", {})
+        if e["method"] == "Runtime.consoleAPICalled":
+            text = " ".join(_remote_text(a) for a in p.get("args", []))
+            frame = (p.get("stackTrace") or {}).get("callFrames") or [{}]
+            if p.get("type") == "error" and not PROBLEM.search(text):
+                text = "console.error: " + text
+            lines.append(f"{text}  ({frame[0].get('url', '')}:{frame[0].get('lineNumber', -1) + 1})")
+        elif e["method"] == "Runtime.exceptionThrown":
+            d = p.get("exceptionDetails", {})
+            text = ((d.get("exception") or {}).get("description") or d.get("text") or "").split("\n")[0]
+            if not text.startswith("Uncaught"):
+                text = "Uncaught " + text
+            lines.append(f"{text}  ({d.get('url', '')}:{d.get('lineNumber', -1) + 1})")
+        elif e["method"] == "Log.entryAdded":
+            entry = p.get("entry", {})
+            if entry.get("level") in ("error", "warning") and not entry.get("url", "").endswith("/favicon.ico"):
+                lines.append(f"{entry.get('text', '')}  ({entry.get('url', '')}:{entry.get('lineNumber', -1) + 1})")
+    return lines
+
+
+def chrome_args(prof: str) -> List[str]:
+    return ["--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+            "--hide-scrollbars", "--use-mock-keychain", "--password-store=basic", "--disable-extensions",
+            "--disable-background-networking", "--disable-component-update", "--disable-sync",
+            "--no-service-autorun", "--mute-audio", f"--user-data-dir={prof}"]
+
+
+def shoot_devtools(chrome: str, url: str, w: int, h: int, png: str, wait_ms: int) -> Tuple[bool, List[str]]:
+    """Open the page through the DevTools protocol so the viewport is exactly w x h.
+
+    Headless Chrome will not make a window narrower than about 500px, so `--window-size=390,...`
+    lays the page out at 500px and only crops the screenshot. Device metrics emulation fixes that.
+    """
     prof = tempfile.mkdtemp(prefix="harness-see-")
-    cmd = [chrome, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-           "--hide-scrollbars", "--use-mock-keychain", "--password-store=basic", "--disable-extensions",
-           "--disable-background-networking", "--disable-component-update", "--disable-sync",
-           "--no-service-autorun", "--mute-audio", f"--user-data-dir={prof}", f"--window-size={w},{h}",
+    kw: Dict[str, Any] = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if os.name == "posix":
+        kw["start_new_session"] = True
+    proc = subprocess.Popen([chrome, *chrome_args(prof), "--remote-debugging-port=0",
+                             f"--window-size={max(w, 800)},{max(h, 600)}", "about:blank"], **kw)
+    ws = None
+    try:
+        port_file = os.path.join(prof, "DevToolsActivePort")
+        for _ in range(200):
+            if os.path.exists(port_file) and os.path.getsize(port_file) > 0:
+                break
+            if proc.poll() is not None:
+                raise OSError("Chrome exited before DevTools was ready")
+            time.sleep(0.1)
+        else:
+            raise OSError("Chrome did not open DevTools in time")
+        with open(port_file) as f:
+            port = int(f.readline().strip())
+        targets = []
+        for _ in range(50):
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=5) as r:
+                targets = [t for t in json.load(r) if t.get("type") == "page"]
+            if targets:
+                break
+            time.sleep(0.1)
+        if not targets:
+            raise OSError("Chrome opened no page")
+        ws = WebSocket(targets[0]["webSocketDebuggerUrl"], timeout=30)
+        dt = DevTools(ws)
+        for method in ("Runtime.enable", "Log.enable", "Page.enable"):
+            dt.call(method)
+        dt.call("Emulation.setDeviceMetricsOverride",
+                {"width": w, "height": h, "deviceScaleFactor": 1, "mobile": w < 768})
+        if w < 768:
+            dt.call("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5})
+        dt.call("Page.navigate", {"url": url})
+        dt.pump(30, until="Page.loadEventFired")
+        dt.pump(wait_ms / 1000.0)
+        ws.sock.settimeout(60)
+        shot = dt.call("Page.captureScreenshot", {"format": "png"})
+        with open(png, "wb") as f:
+            f.write(base64.b64decode(shot["data"]))
+        return True, console_lines(dt.events)
+    finally:
+        if ws:
+            ws.close()
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+            proc.wait(timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        shutil.rmtree(prof, ignore_errors=True)
+
+
+def shoot(chrome: str, url: str, w: int, h: int, png: str, wait_ms: int) -> Tuple[bool, List[str]]:
+    try:
+        return shoot_devtools(chrome, url, w, h, png, wait_ms)
+    except (OSError, ValueError, KeyError, urllib.error.URLError) as e:
+        ok, lines = shoot_cli(chrome, url, w, h, png, wait_ms)
+        note = f"DevTools unavailable ({e}); used the plain screenshot"
+        if w < 500:
+            note += f", which lays the page out at 500px and crops it to {w}px"
+        return ok, [note] + lines
+
+
+def shoot_cli(chrome: str, url: str, w: int, h: int, png: str, wait_ms: int) -> Tuple[bool, List[str]]:
+    prof = tempfile.mkdtemp(prefix="harness-see-")
+    cmd = [chrome, *chrome_args(prof), f"--window-size={w},{h}",
            f"--virtual-time-budget={wait_ms}", f"--screenshot={png}", "--enable-logging=stderr", "--v=0", url]
     timed_out = False
     kw: Dict[str, Any] = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True, "errors": "replace"}

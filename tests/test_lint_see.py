@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import struct
 import subprocess
 import sys
 import unittest
@@ -167,6 +168,29 @@ class SeeRunTest(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.root, "artifacts/harness/see/home-390x844.png")))
         self.assertIn("GET /index.html", r.stdout)  # server log tail
         self.assertIsNone(see_mod.is_up(f"http://127.0.0.1:{self.port}/"))
+
+    def test_narrow_viewport_is_the_real_layout_width(self):
+        # Headless Chrome will not make a window narrower than 500px; a 390px phone screenshot
+        # must still be laid out at 390px, not cut from a 500px page.
+        write(self.root, "site/width.html",
+              "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+              "<script>console.log('W=' + innerWidth)</script><div style='width:100%;height:40px'></div>")
+        self.pages(("width", "/width.html"))
+        r = harness(self.root, "see")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("W=390", r.stdout)
+        with open(os.path.join(self.root, "artifacts/harness/see/width-390x844.png"), "rb") as f:
+            head = f.read(24)
+        self.assertEqual(struct.unpack(">II", head[16:24]), (390, 844))
+
+    def test_console_error_and_failed_load_are_reported(self):
+        write(self.root, "site/err.html",
+              "<h1>x</h1><img src='/missing.png'><script>console.error('Error: boom')</script>")
+        self.pages(("err", "/err.html"))
+        r = harness(self.root, "see")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("boom", r.stdout)
+        self.assertIn("missing.png", r.stdout)
 
     def test_script_error_and_missing_page_fail(self):
         self.pages(("broken", "/broken.html"), ("missing", "/nope.html"))
