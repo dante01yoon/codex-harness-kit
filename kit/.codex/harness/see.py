@@ -129,16 +129,32 @@ def shoot(chrome: str, url: str, w: int, h: int, png: str, wait_ms: int) -> Tupl
     cmd = [chrome, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
            "--hide-scrollbars", f"--user-data-dir={prof}", f"--window-size={w},{h}",
            f"--virtual-time-budget={wait_ms}", f"--screenshot={png}", "--enable-logging=stderr", "--v=0", url]
+    timed_out = False
+    kw: Dict[str, Any] = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True, "errors": "replace"}
+    if os.name == "posix":
+        kw["start_new_session"] = True
+    proc = subprocess.Popen(cmd, **kw)
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60 + wait_ms // 1000)
-        err = r.stderr
-    except subprocess.TimeoutExpired as e:
-        err = (e.stderr or "") if isinstance(e.stderr, str) else ""
+        _, err = proc.communicate(timeout=60 + wait_ms // 1000)
+    except subprocess.TimeoutExpired:
+        # Headless Chrome sometimes keeps running after it wrote the screenshot (slow CI machines).
+        # Kill it and keep everything it already logged, so console errors are never lost.
+        timed_out = True
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except OSError:
+            pass
+        _, err = proc.communicate()
     finally:
         shutil.rmtree(prof, ignore_errors=True)
     lines = []
-    for m in CONSOLE.finditer(err):
+    for m in CONSOLE.finditer(err or ""):
         lines.append(f"{m.group(1)}  ({m.group(2)}:{m.group(3)})")
+    if timed_out and not lines:
+        lines.append("browser did not exit in time; console output may be incomplete (Error: browser timeout)")
     return os.path.exists(png), lines
 
 
