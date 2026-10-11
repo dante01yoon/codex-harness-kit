@@ -1,0 +1,123 @@
+{
+  "protect": {
+    "paths": [
+      "tests/",
+      "test/",
+      "__tests__/",
+      "/e2e/",
+      "**/*.test.*",
+      "**/*.spec.*",
+      "vitest.config.*",
+      "vitest.workspace.*",
+      "jest.config.*",
+      "playwright.config.*"
+    ],
+    "allow_commands": [
+      "npm test",
+      "npm run test",
+      "pnpm test",
+      "pnpm run test",
+      "yarn test",
+      "bun test",
+      "npx vitest run",
+      "npx vitest",
+      "npx jest",
+      "npx playwright test",
+      "npx tsc --noEmit"
+    ]
+  },
+  "examples": {
+    "block": [
+      {
+        "why": "edit a test with apply_patch",
+        "patch": "*** Begin Patch\n*** Update File: tests/rules/refund.test.ts\n@@\n-expect(refund).toBe(1500)\n+expect(refund).toBe(1000)\n*** End Patch"
+      },
+      {
+        "why": "edit a colocated test",
+        "patch": "*** Begin Patch\n*** Update File: src/cart.test.tsx\n@@\n-a\n+b\n*** End Patch"
+      },
+      {
+        "why": "move a test away",
+        "patch": "*** Begin Patch\n*** Update File: src/a.ts\n*** Move to: tests/a.ts\n*** End Patch"
+      },
+      {
+        "why": "sed in place",
+        "bash": "sed -i '' 's/1500/1000/' tests/rules/refund.test.ts"
+      },
+      {
+        "why": "append with redirection",
+        "bash": "echo 'it.skip()' >> tests/rules/refund.test.ts"
+      },
+      {
+        "why": "delete the test folder",
+        "bash": "rm -rf tests"
+      },
+      {
+        "why": "cd then delete",
+        "bash": "cd tests && rm rules/refund.test.ts"
+      },
+      {
+        "why": "nested shell",
+        "bash": "bash -lc \"rm tests/rules/refund.test.ts\""
+      },
+      {
+        "why": "node one-liner write",
+        "bash": "node -e \"require('fs').writeFileSync('tests/x.test.ts','')\""
+      },
+      {
+        "why": "restore tests from git",
+        "bash": "git checkout -- tests/rules/refund.test.ts"
+      },
+      {
+        "why": "snapshot update",
+        "bash": "npx vitest run -u"
+      },
+      {
+        "why": "relax the test config",
+        "patch": "*** Begin Patch\n*** Update File: vitest.config.ts\n@@\n-  include: ['tests/**/*.test.ts'],\n+  include: [],\n*** End Patch"
+      },
+      {
+        "why": "format the whole project",
+        "bash": "npx prettier --write ."
+      },
+      {
+        "why": "heredoc into a test",
+        "bash": "cat > tests/new.test.ts <<'EOF'\nit('passes', () => {})\nEOF"
+      }
+    ],
+    "allow": [
+      {
+        "why": "read a test",
+        "bash": "cat tests/rules/refund.test.ts"
+      },
+      {
+        "why": "search tests",
+        "bash": "rg -n \"refund\" tests"
+      },
+      {
+        "why": "run the tests",
+        "bash": "npx vitest run tests/rules"
+      },
+      {
+        "why": "type check",
+        "bash": "npx tsc --noEmit"
+      },
+      {
+        "why": "edit implementation",
+        "patch": "*** Begin Patch\n*** Update File: src/rules/refund.ts\n@@\n-  return 0\n+  return 1500\n*** End Patch"
+      },
+      {
+        "why": "format only src",
+        "bash": "npx prettier --write src/rules/refund.ts"
+      },
+      {
+        "why": "copy a test out to read",
+        "bash": "cp tests/rules/refund.test.ts /tmp/refund.test.ts"
+      },
+      {
+        "why": "diff tests",
+        "bash": "git diff -- tests"
+      }
+    ]
+  }
+}

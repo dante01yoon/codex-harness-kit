@@ -1,0 +1,23 @@
+{
+  "protect": {
+    "paths": ["tests/", "test/", "**/test_*.py", "**/*_test.py", "conftest.py", "**/conftest.py", "pytest.ini", "tox.ini", "noxfile.py"],
+    "allow_commands": ["pytest", "python -m pytest", "python3 -m pytest", "python -m unittest", "python3 -m unittest", "uv run pytest", "poetry run pytest", "tox", "nox"]
+  },
+  "examples": {
+    "block": [
+      {"why": "edit a test with apply_patch", "patch": "*** Begin Patch\n*** Update File: tests/test_refund.py\n@@\n-    assert refund(30) == 1500\n+    assert refund(30) == 1000\n*** End Patch"},
+      {"why": "edit a colocated test", "patch": "*** Begin Patch\n*** Update File: app/test_cart.py\n@@\n-a\n+b\n*** End Patch"},
+      {"why": "sed in place", "bash": "sed -i 's/1500/1000/' tests/test_refund.py"},
+      {"why": "python one-liner write", "bash": "python3 -c \"open('tests/test_refund.py','w').write('')\""},
+      {"why": "delete conftest", "bash": "rm conftest.py"},
+      {"why": "format the whole project", "bash": "black ."}
+    ],
+    "allow": [
+      {"why": "read a test", "bash": "cat tests/test_refund.py"},
+      {"why": "run pytest on a folder", "bash": "python3 -m pytest -q tests"},
+      {"why": "run unittest", "bash": "python3 -m unittest discover -s tests"},
+      {"why": "edit implementation", "patch": "*** Begin Patch\n*** Update File: app/refund.py\n@@\n-    return 0\n+    return 1500\n*** End Patch"},
+      {"why": "format only app", "bash": "black app/refund.py"}
+    ]
+  }
+}

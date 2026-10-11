@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "lang": "ko",
+  "mode": "enforce",
+  "on_error": "block",
+  "protect": {
+    "paths": [".codex/hooks.json", ".codex/config.toml", ".codex/harness/"],
+    "allow_commands": ["python3 .codex/harness/harness.py"]
+  },
+  "deny_read": {
+    "paths": [".env", ".env.*", "!.env.example", "!.env.sample", "!.env.template", "*.pem", "id_rsa", "id_ed25519"]
+  },
+  "secrets": {
+    "patterns": [
+      {"id": "toss-live-key", "regex": "live_(?:sk|gsk|ck|gck)_[A-Za-z0-9]"},
+      {"id": "stripe-live-key", "regex": "\\b(?:sk|rk)_live_[0-9A-Za-z]{10,}"},
+      {"id": "openai-api-key", "regex": "\\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}"},
+      {"id": "anthropic-api-key", "regex": "\\bsk-ant-(?:api|admin)\\d{2}-[A-Za-z0-9_-]{20,}"},
+      {"id": "aws-access-key-id", "regex": "\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b"},
+      {"id": "github-token", "regex": "\\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,})"},
+      {"id": "slack-token", "regex": "\\bxox[baprs]-[A-Za-z0-9-]{10,}"},
+      {"id": "google-api-key", "regex": "\\bAIza[0-9A-Za-z_-]{35}\\b"},
+      {"id": "private-key", "regex": "-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----"}
+    ]
+  },
+  "verify": {
+    "commands": [],
+    "skip_when_unchanged": true,
+    "max_continuations_per_turn": 2,
+    "output_tail_lines": 40
+  },
+  "log": {"enabled": true, "path": ".codex/harness/logs/events.jsonl", "max_bytes": 1000000},
+  "examples": {
+    "block": [
+      {"why": "turn the harness off", "bash": "rm .codex/hooks.json"},
+      {"why": "loosen the harness config", "patch": "*** Begin Patch\n*** Update File: .codex/harness/harness.json\n@@\n-  \"mode\": \"enforce\",\n+  \"mode\": \"observe\",\n*** End Patch"},
+      {"why": "disable hooks in project config", "bash": "echo '[features]' >> .codex/config.toml"},
+      {"why": "read .env", "bash": "cat .env"},
+      {"why": "read .env through grep", "bash": "grep TOKEN .env.local"},
+      {"why": "secret in a command", "bash": "export STRIPE=sk\u005flive_abcdefghijklmnop1234"},
+      {"why": "secret in a patch", "patch": "*** Begin Patch\n*** Add File: src/config.ts\n+export const KEY = \"live\u005fsk_FAKE0000000000\";\n*** End Patch"},
+      {"why": "private key in a patch", "patch": "*** Begin Patch\n*** Add File: deploy/key.txt\n+-----BEGIN OPENSSH PRIVATE\u0020KEY-----\n*** End Patch"}
+    ],
+    "allow": [
+      {"why": "inspect the harness", "bash": "cat .codex/harness/harness.json"},
+      {"why": "run the harness doctor", "bash": "python3 .codex/harness/harness.py doctor"},
+      {"why": "read the env example", "bash": "cat .env.example"},
+      {"why": "test key is fine", "patch": "*** Begin Patch\n*** Add File: src/pay.ts\n+const key = process.env.TOSS_SECRET_KEY ?? \"test_sk_dummy\";\n*** End Patch"},
+      {"why": "git status", "bash": "git status --short"},
+      {"why": "list files", "bash": "ls -la"}
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "protect": {
+    "paths": ["**/*_test.go", "testdata/", "**/testdata/"],
+    "allow_commands": ["go test", "go vet"]
+  },
+  "examples": {
+    "block": [
+      {"why": "edit a test", "patch": "*** Begin Patch\n*** Update File: internal/refund/refund_test.go\n@@\n-\tif got != 1500 {\n+\tif got != 1000 {\n*** End Patch"},
+      {"why": "delete test data", "bash": "rm -rf internal/refund/testdata"},
+      {"why": "gofmt the whole tree", "bash": "gofmt -w ."}
+    ],
+    "allow": [
+      {"why": "run tests", "bash": "go test ./..."},
+      {"why": "edit implementation", "patch": "*** Begin Patch\n*** Update File: internal/refund/refund.go\n@@\n-\treturn 0\n+\treturn 1500\n*** End Patch"},
+      {"why": "gofmt one file", "bash": "gofmt -w internal/refund/refund.go"}
+    ]
+  }
+}

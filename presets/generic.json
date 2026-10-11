@@ -1,0 +1,14 @@
+{
+  "protect": {
+    "paths": ["tests/", "test/"],
+    "allow_commands": []
+  },
+  "examples": {
+    "block": [
+      {"why": "edit a file under tests/", "patch": "*** Begin Patch\n*** Update File: tests/check.sh\n@@\n-a\n+b\n*** End Patch"}
+    ],
+    "allow": [
+      {"why": "read a file under tests/", "bash": "cat tests/check.sh"}
+    ]
+  }
+}
