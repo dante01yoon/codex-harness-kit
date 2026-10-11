@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Documentation in two full languages: English (`README.md`, `docs/*.md`) and Korean (`README.ko.md`, `docs/*.ko.md`)
+- THREAT_MODEL: test-setting lines in `package.json`/`pyproject.toml` changed through `apply_patch` are blocked; only shell edits of those files are a gap
+
 ## 0.1.0 - 2026-10-10
 
 First release.

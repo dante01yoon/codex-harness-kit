@@ -1,65 +1,67 @@
-# 무엇을 막고, 무엇을 막지 못하나
+# What it blocks, and what it does not
 
-codex-harness-kit는 **성실하지만 목표에 쫓기는 에이전트**를 상대로 설계했습니다. 테스트를 통과시키라는 요청을 받은 코덱스가 기대값을 바꾸거나, 테스트를 지우거나, 설정을 느슨하게 하거나, 실제 키를 코드에 적는 일입니다. 악의적인 공격자를 막는 샌드박스가 아닙니다.
+**English** | [한국어](THREAT_MODEL.ko.md)
 
-## 막는 것
+codex-harness-kit is designed against a **cooperative agent under pressure to finish**: Codex, asked to make the tests pass, changes an expectation, deletes a test, loosens a setting or writes a real key into the code. It is not a sandbox against an attacker.
 
-- `apply_patch`로 보호 경로를 추가·수정·삭제·이동하는 일. `Move to:`, 절대 경로, `..`, 따옴표·백슬래시·공백이 섞인 헤더, 셸에서 `apply_patch <<EOF`로 부르는 경우도 포함합니다
-- `git apply`, `git am`, `patch`로 보호 경로를 바꾸는 일. 패치 파일, 표준 입력(`< fix.patch`), heredoc 모두 봅니다
-- 셸 명령으로 보호 경로를 바꾸는 일: 리디렉션(`>`, `>>`, `>|`, `&>`, `exec >`), `tee`/`sponge`, `cp`/`mv`/`ln`/`rsync`/`install`의 대상(`-t` 포함), `rm`/`touch`/`truncate`/`chmod`, `sed -i`/`perl -i`/`awk -i inplace`, `ed`/`ex`/`vim -c`, `dd of=`, `find -delete`/`-exec`(`-name` 조건을 따져 봅니다), `git checkout`/`restore`/`rm`/`mv`
-- 간접 실행: `cd`/`pushd` 뒤의 상대 경로, 서브셸, `bash -c`/`sh -lc`, `eval`, heredoc으로 넘긴 셸·파이썬 코드, 쓰기 동작이 있는 `python -c`/`node -e`, `$(pwd)`·`$PWD`·`$(git rev-parse --show-toplevel)`로 만든 경로, 보호 경로가 들어간 `$(...)`와 백틱, `xargs`로 넘긴 경로
-- 글롭은 실제 파일로 펼쳐서 판단합니다(`rm tests/*.ts`는 막고 `rm lib/*.js`는 통과)
-- 보호 경로를 품은 폴더를 통째로 지우거나 옮기는 일(`rm -rf src`에 `src/a.test.ts`가 있는 경우 등)
-- 포매터가 보호 경로를 다시 쓰는 일(`prettier --write .`, `black .`, `gofmt -w .` 등)
-- 어떤 실행기로 부르든 기대값 갱신 플래그(`vitest -u`, `pnpm exec vitest -u`, `jest --updateSnapshot`, `playwright --update-snapshots` 등)
-- 이미 커밋한 테스트를 되돌리는 일(`git checkout HEAD~3 .`, `git restore --source=…`, `git reset --hard <rev>`, `git revert`)과, 사람이 고친 테스트가 남아 있을 때의 `git stash`/`reset --hard`/`checkout .`/`clean`
-- `npm pkg set scripts.test=…`처럼 테스트 스크립트를 바꾸는 일
-- 하네스 자체를 끄는 일: `.codex/hooks.json`, `.codex/config.toml`, `.codex/harness/`, `~/.codex/` 수정
-- `.env` 같은 비밀 파일을 읽거나 쓰는 일. 글롭(`cat .env*`), `grep -r`, `rg --hidden`, `git show HEAD:.env`도 포함합니다
-- 실제 비밀 값으로 보이는 문자열이 명령이나 새로 추가되는 줄에 들어가는 일
-- macOS와 Windows에서는 대소문자만 바꾼 경로(`rm TESTS/...`)도 같은 경로로 봅니다
+## Blocked
 
-## 일부러 막는 것
+- Adding, editing, deleting or moving protected paths with `apply_patch`, including `Move to:`, absolute paths, `..`, headers with quotes, backslashes or extra spaces, and `apply_patch <<EOF` called from the shell
+- Changing protected paths with `git apply`, `git am` or `patch`, whether the patch comes from a file, standard input (`< fix.patch`) or a heredoc. A patch piped in from another command is refused because it cannot be inspected
+- Shell commands that change protected paths: redirections (`>`, `>>`, `>|`, `&>`, `exec >`), `tee`/`sponge`, the target of `cp`/`mv`/`ln`/`rsync`/`install` (including `-t`), `rm`/`touch`/`truncate`/`chmod`, `sed -i`/`perl -i`/`awk -i inplace`, `ed`/`ex`/`vim -c`, `dd of=`, `find -delete`/`-exec` (the `-name` filter is taken into account), `git checkout`/`restore`/`rm`/`mv`
+- Indirection: relative paths after `cd`/`pushd`, subshells, `bash -c`/`sh -lc`, `eval`, shell or Python code passed in a heredoc, `python -c`/`node -e` code that writes, paths built with `$(pwd)`, `$PWD` or `$(git rev-parse --show-toplevel)`, `$(...)` and backticks involving a protected path, paths passed through `xargs`
+- Globs are expanded against real files (`rm tests/*.ts` is blocked, `rm lib/*.js` passes)
+- Deleting or moving a folder that contains protected files (`rm -rf src` when there is `src/a.test.ts`)
+- Formatters rewriting protected paths (`prettier --write .`, `black .`, `gofmt -w .`, ...)
+- Expectation-update flags, whichever runner starts the tests (`vitest -u`, `pnpm exec vitest -u`, `jest --updateSnapshot`, `playwright --update-snapshots`, ...)
+- Rolling back committed tests (`git checkout HEAD~3 .`, `git checkout <commit>`, `git switch --detach <commit>`, `git restore --source=…`, `git reset --hard <rev>`, `git revert`, `git read-tree -u`), and `git stash`/`reset --hard`/`checkout .`/`clean` while a human's test edits are uncommitted
+- Changing test settings: `test`/`lint`/`typecheck` script lines in `package.json` or pytest settings lines in `pyproject.toml`/`setup.cfg` through `apply_patch`, and `npm pkg set scripts.*`
+- Switching the harness off: changes to `.codex/hooks.json`, `.codex/config.toml`, `.codex/harness/` or `~/.codex/`
+- Reading or writing secret files such as `.env`, including globs (`cat .env*`), `grep -r`, `rg --hidden` and `git show HEAD:.env`
+- Strings that look like real secrets in a command or in lines a patch adds
+- On macOS and Windows, paths that differ only in case (`rm TESTS/...`) are treated as the same path
 
-- `cp .env.example .env`: 비밀 파일에 쓰는 일이라 막습니다. 사람이 직접 만드세요.
-- 포매터나 `--fix`가 보호 파일이 들어 있는 폴더 전체를 다루는 경우(`npx eslint --fix src`인데 `src`에 `*.test.ts`가 있는 경우 등): 테스트 파일도 바뀌므로 막습니다. 파일을 지정해 실행하게 하세요.
+## Blocked on purpose
 
-## 막지 못하는 것
+- `cp .env.example .env`: it writes a secret file. A human creates it.
+- A formatter or `--fix` run over a whole folder that holds protected files (`npx eslint --fix src` when `src` has `*.test.ts`): test files would change too, so name the files instead.
 
-아래 사례는 실행 전에 막지 못합니다. `tests/test_probes.py`의 `KNOWN_GAPS`에 그대로 들어 있고, 테스트가 "여전히 통과한다"를 확인합니다. 가드가 이 중 하나를 막게 되면 테스트가 실패하므로 이 문서도 함께 고칩니다.
+## Not blocked
 
-다만 **보호 파일이 실제로 바뀌었다면 턴이 끝날 때 알아차립니다.** 턴을 시작할 때 보호 파일의 해시를 기억해 두고(UserPromptSubmit 훅), 끝날 때(Stop 훅) 다시 비교해 바뀐 파일이 있으면 코덱스에게 멈추고 보고하라고 알립니다. 되돌리지는 못하지만 조용히 지나가지는 않습니다. 비밀 파일을 읽는 일은 이 방법으로도 잡지 못합니다.
+The cases below are not blocked before they run. They are listed in `KNOWN_GAPS` in `tests/test_probes.py`, and the tests assert that they still pass. If the guard starts catching one, that test fails and this document is updated with it.
 
-| 사례 | 이유 |
+However, **if a protected file actually changes, it is noticed at the end of the turn.** Hashes of protected files are taken when a turn starts (UserPromptSubmit hook) and compared when it ends (Stop hook); if anything changed, Codex is told to stop and report it. The change is not undone, but it does not pass silently. Reading a secret file is not caught this way.
+
+| Case | Why |
 | --- | --- |
-| `python3 scripts/fix.py` | 쓰기가 스크립트 파일 안에서 일어나 명령 문자열에 보이지 않습니다 |
-| `tar -xf /tmp/b.tar` | 압축 파일 안의 경로를 열어 보지 않습니다 |
-| `xargs rm < /tmp/list` | 경로가 다른 파일에서 옵니다 |
-| `node -e "fs.rmSync(['tes','ts'].join(''))"` | 경로를 실행 중에 조립합니다 |
-| `ln -s tests t && rm t/rules/helpers.ts` | 같은 명령 안에서 만든 폴더 별칭을 따라가지 않습니다(이름 규칙 `**/*.test.*`에 걸리는 파일은 막힙니다) |
-| `node -r dotenv/config -e '...'` | 라이브러리가 비밀 파일을 읽습니다 |
+| `python3 scripts/fix.py` | The write happens inside a script file, not in the command string |
+| `tar -xf /tmp/b.tar` | Archive contents are not inspected |
+| `xargs rm < /tmp/list` | The paths come from another file |
+| `node -e "fs.rmSync(['tes','ts'].join(''))"` | The path is assembled at run time |
+| `ln -s tests t && rm t/rules/helpers.ts` | A folder alias created in the same command is not followed (files matching the name rule `**/*.test.*` are still blocked) |
+| `node -r dotenv/config -e '...'` | A library reads the secret file |
 
-그 밖에:
+Also:
 
-- **난독화.** 변수 조합(`d=te; rm ${d}sts/a`), 인코딩한 명령(`echo ... | base64 -d | sh`) 등. 문자열 검사의 한계입니다.
-- **훅이 보지 못하는 경로.** MCP 도구의 파일 쓰기(기본 matcher는 `Bash`와 `apply_patch`만 봅니다), `write_stdin`으로 이미 실행 중인 셸에 보내는 입력, 훅을 거치지 않는 특수 도구.
-- **`package.json`의 `scripts.test`를 패치로 고치는 일.** `npm pkg set scripts.*`는 막지만, 파일 전체를 보호하면 의존성 추가도 막히므로 `package.json`은 기본으로 보호하지 않습니다. 필요하면 `protect.paths`에 넣으세요.
-- **신뢰하지 않은 훅.** 코덱스는 새로 만들거나 바뀐 프로젝트 훅을 사람이 신뢰하기 전까지 경고 없이 건너뜁니다. `codex exec`처럼 화면 없이 실행할 때는 더 알아차리기 어렵습니다.
-- **훅이 죽는 경우.** 파이썬이 없거나 훅이 제한 시간을 넘기면 코덱스는 해당 도구 호출을 그대로 진행합니다. 가드는 자기 오류를 잡아 막는 쪽으로 처리하고(`on_error`), 테스트는 판단 하나가 3초 안에 끝나는지 확인하지만, 프로세스 자체가 시작되지 못하면 어쩔 수 없습니다. `harness.py doctor`로 확인하세요.
-- **비밀 값의 모든 형태.** 정해 둔 패턴만 찾습니다. 저장소에 올리기 전에는 gitleaks 같은 전용 도구를 함께 쓰세요.
-- **내 컴퓨터 밖.** 훅은 로컬에서만 동작합니다. 공유 저장소에서는 CI와 브랜치 보호가 같은 검사를 한 번 더 해야 합니다.
+- **Obfuscation.** Assembled variables (`d=te; rm ${d}sts/a`), encoded commands (`echo ... | base64 -d | sh`) and the like. A limit of string inspection.
+- **Paths the hook does not see.** File writes through MCP tools (the default matcher covers `Bash` and `apply_patch` only), input sent with `write_stdin` to an already running shell, and special tools that skip the hook path.
+- **Test settings in `package.json` or `pyproject.toml` changed from the shell.** Patches to those lines and `npm pkg set scripts.*` are blocked, but `sed -i` on the file is not, because protecting the whole file would also block adding dependencies. Add the file to `protect.paths` if you need that.
+- **Untrusted hooks.** Codex silently skips new or changed project hooks until a person trusts them. With `codex exec` and no UI this is easy to miss.
+- **A hook that does not run.** If Python is missing or a hook exceeds its timeout, Codex goes ahead with the tool call. The guard catches its own errors and blocks (`on_error`), and the tests check that each decision takes less than 3 seconds, but nothing helps if the process cannot start. Check with `harness.py doctor`.
+- **Every form of secret.** Only the configured patterns are found. Use a dedicated scanner such as gitleaks before pushing.
+- **Outside your machine.** Hooks run locally. On a shared repository, CI and branch protection must repeat the checks.
 
-## 실패했을 때의 기본 동작
+## Default behavior on failure
 
-| 상황 | 가드(PreToolUse) | 검증(Stop) |
+| Situation | Guard (PreToolUse) | Verification (Stop) |
 | --- | --- | --- |
-| 설정 파일이 없거나 잘못됨 | 막음(`on_error: block`) | 경고만 남기고 끝냄 |
-| 검증 명령을 찾지 못함(127, `No module named`) | - | 환경 문제로 보고 경고만 남김 |
-| 코덱스가 `BLOCKED`로 시작하는 줄을 남기고 멈춤 | - | 다시 시키지 않고 경고만 남김 |
-| 하네스 폴더를 찾지 못함 | `{}`로 답해 통과 | `{}`로 답해 통과 |
-| 훅 내부 예외 | 막음(`on_error: block`) | 경고만 남기고 끝냄 |
-| 검증 명령 실패 | - | 코덱스가 이어서 고치게 함(최대 `max_continuations_per_turn`번) |
-| 검증 명령 시간 초과 | - | 실패로 처리 |
-| 훅 프로세스가 시작되지 못함 | 코덱스가 통과시킴 | 코덱스가 통과시킴 |
+| Settings file missing or invalid | blocks (`on_error: block`) | finishes with a warning |
+| Verification command not found (127, `No module named`) | - | reported as an environment problem, warning only |
+| Codex stops with a line starting with `BLOCKED` | - | not sent back, warning only |
+| Harness folder not found | answers `{}` and lets the call through | answers `{}` |
+| Internal error in the hook | blocks (`on_error: block`) | finishes with a warning |
+| Verification command fails | - | Codex keeps fixing (at most `max_continuations_per_turn` times) |
+| Verification command times out | - | treated as a failure |
+| Hook process cannot start | Codex lets the call through | Codex lets the turn end |
 
-검증 훅이 실패할 때 막지 않는 이유는, 설정 오류 하나로 모든 응답이 끝나지 않는 상태가 되는 것을 피하기 위해서입니다.
+The Stop hook does not block on its own errors so that one bad setting cannot leave every response unable to finish.

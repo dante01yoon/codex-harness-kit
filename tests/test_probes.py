@@ -1,7 +1,7 @@
 """Regression corpus from a red-team pass: realistic bypasses, false positives, known gaps.
 
 KNOWN_GAPS are asserted as *allowed* on purpose. They are documented in
-docs/THREAT_MODEL.md; if the guard starts catching one, move it to BLOCK and update the doc.
+docs/THREAT_MODEL.md and docs/THREAT_MODEL.ko.md; if the guard starts catching one, move it to BLOCK and update the doc.
 """
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ BY_DESIGN_BLOCK = [
     "npx eslint --fix src",          # src contains a colocated test file
 ]
 
-# Accepted gaps of a string-level guard. Keep in sync with docs/THREAT_MODEL.md.
+# Accepted gaps of a string-level guard. Keep in sync with docs/THREAT_MODEL.md and docs/THREAT_MODEL.ko.md.
 KNOWN_GAPS = [
     "python3 scripts/fix.py",                                             # writes happen inside a script file
     "tar -xf /tmp/b.tar",                                                 # archive contents are not inspected
