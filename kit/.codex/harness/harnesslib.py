@@ -370,6 +370,8 @@ def sha(text: str) -> str:
 MESSAGES = {
     "ko": {
         "protect": "보호된 검증 기준 파일({target}, 규칙 {rule})을 바꾸는 작업이라 막았습니다. 테스트와 검증 설정은 사람이 정한 기준입니다. 구현 코드를 고치고, 기준을 바꿔야 한다면 멈추고 바꿀 파일과 이유를 사람에게 보고하세요.",
+        "update_flag": "`{target}`의 `{rule}`는 스냅숏과 기대값을 실행 결과에 맞춰 다시 쓰는 옵션이라 막았습니다. 기대값은 사람이 정한 기준입니다. 이 옵션 없이 테스트를 실행하고, 기대값을 바꿔야 한다면 멈추고 사람에게 보고하세요.",
+        "test_setting": "검증 명령이 쓰는 테스트 설정({target})을 바꾸는 작업이라 막았습니다. 테스트 스크립트와 테스트 설정은 사람이 정한 기준입니다. 바꿔야 한다면 멈추고 바꿀 내용과 이유를 사람에게 보고하세요.",
         "protect_dir": "{target}을(를) 지우거나 옮기면 보호된 파일({rule})까지 바뀌어서 막았습니다. 범위를 좁혀 구현 코드만 다루세요.",
         "deny_read": "{target}은(는) 읽으면 안 되는 비밀 파일(규칙 {rule})이라 막았습니다. 값이 필요하면 사람에게 요청하세요.",
         "secret": "실제 비밀 값으로 보이는 문자열({ids})이 들어 있어 막았습니다. 테스트용 값이나 환경 변수 이름을 쓰세요.",
@@ -384,6 +386,8 @@ MESSAGES = {
     },
     "en": {
         "protect": "Blocked: this changes a protected verification file ({target}, rule {rule}). Tests and verification config are human-owned. Fix the implementation instead; if the criteria must change, stop and report which files and why.",
+        "update_flag": "Blocked: `{rule}` makes `{target}` rewrite snapshots and expectations to match the current output. Expectations are human-owned. Run the tests without it; if an expectation must change, stop and report to a human.",
+        "test_setting": "Blocked: this changes test settings the verification commands rely on ({target}). Test scripts and settings are human-owned. If they must change, stop and report what and why to a human.",
         "protect_dir": "Blocked: removing or moving {target} would also change protected files ({rule}). Narrow the change to implementation code.",
         "deny_read": "Blocked: {target} is a secret file (rule {rule}). Ask a human if you need a value from it.",
         "secret": "Blocked: the input contains what looks like a real secret ({ids}). Use a test value or an environment variable name.",

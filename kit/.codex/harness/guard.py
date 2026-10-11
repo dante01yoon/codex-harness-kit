@@ -188,7 +188,7 @@ def check_patch(patch: str, ctx: Ctx, base: Optional[str] = None) -> List[Findin
             added.append(line[1:])
         rule = TEST_SETTINGS.get(current)
         if rule and line[:1] in "+-" and not line.startswith(("+++", "---")) and rule.search(line[1:]):
-            out.append(finding("protect", f"{current}: {line[1:].strip()[:60]}", "test settings"))
+            out.append(finding("test_setting", f"{current}: {line[1:].strip()[:60]}", "test settings"))
     ids = hl.find_secrets("\n".join(added), ctx.secrets)
     if ids:
         out.append(finding("secret", "patch", ids=ids))
@@ -613,12 +613,12 @@ def check_shell(cmd: str, ctx: Ctx, depth: int = 0) -> List[Finding]:
                     out += pipeline_paths(ctx, segs, idx, base)
             continue
         if name in PKG_MANAGERS and args[:2] in (["pkg", "set"], ["pkg", "delete"]) and any(a.startswith("scripts.") for a in args):
-            out.append(finding("protect", "package.json scripts", "npm pkg set scripts.*"))
+            out.append(finding("test_setting", "package.json scripts", "npm pkg set scripts.*"))
             continue
         flag = update_flag(ctx, words)
         test_run = is_test_run(ctx, words, name, args)
         if flag and test_run:
-            out.append(finding("protect", " ".join(words), flag))
+            out.append(finding("update_flag", " ".join(words), flag))
             continue
         if test_run:
             continue
