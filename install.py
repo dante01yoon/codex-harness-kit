@@ -30,7 +30,7 @@ SCRIPTS = ["harnesslib.py", "guard.py", "verify.py", "harness.py", "lint.py", "s
 MARK_START = "<!-- codex-harness-kit:start -->"
 MARK_END = "<!-- codex-harness-kit:end -->"
 GITIGNORE_LINE = ".codex/harness/logs/"
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 sys.path.insert(0, SRC)
 import harnesslib as hl  # noqa: E402

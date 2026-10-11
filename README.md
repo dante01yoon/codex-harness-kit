@@ -77,7 +77,7 @@ python3 codex-harness-kit/install.py ~/projects/my-app --lint \
 ```
 
 - `--lint` runs `lint.rules` from `harness.json` before Codex finishes. A rule has `files`, `forbid` (a regex that must not appear), `why` and `fix`. In an existing project a person can run `harness.py lint --baseline` to record today's violations so only new ones fail (Codex is blocked from running it).
-- `--see-url`, `--see-start` turn on the screen check. If the app is not up, it is started with that command and stopped afterwards. List screens in `see.pages`. It uses an installed Chrome, Chromium or Edge in headless mode; nothing else is installed.
+- `--see-url`, `--see-start` turn on the screen check. If the app is not up, it is started with that command and stopped afterwards. List screens in `see.pages`. It drives an installed Chrome, Chromium or Edge in headless mode through the DevTools protocol, so phone widths such as 390px are laid out at that width; nothing else is installed.
 - `--see-verify` adds the screen check to the Stop hook. Codex cannot open a port inside its default sandbox, but the Stop hook runs outside the sandbox, so this check works.
 - Screenshots and logs go to `artifacts/harness/see/` (git-ignored). They stay outside `.codex/` because the Codex sandbox cannot write there.
 

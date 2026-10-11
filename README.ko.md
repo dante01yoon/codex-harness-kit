@@ -77,7 +77,7 @@ python3 codex-harness-kit/install.py ~/projects/my-app --lint \
 ```
 
 - `--lint`: `harness.json`의 `lint.rules`를 응답을 마치기 전에 검사합니다. 규칙은 `files`(적용할 파일), `forbid`(나오면 안 되는 정규식), `why`(이유), `fix`(고치는 법)로 씁니다. 이미 있는 프로젝트라면 사람이 `harness.py lint --baseline`으로 지금 있는 위반을 기록해 두고 새 위반만 막을 수 있습니다(코덱스는 이 명령을 실행할 수 없습니다).
-- `--see-url`, `--see-start`: 화면 확인을 켭니다. 앱이 떠 있지 않으면 시작 명령으로 띄우고, 끝나면 다시 끕니다. 확인할 화면은 `see.pages`에 적습니다. 설치된 Chrome·Chromium·Edge를 headless로 쓰므로 따로 설치할 것이 없습니다.
+- `--see-url`, `--see-start`: 화면 확인을 켭니다. 앱이 떠 있지 않으면 시작 명령으로 띄우고, 끝나면 다시 끕니다. 확인할 화면은 `see.pages`에 적습니다. 설치된 Chrome·Chromium·Edge를 headless로 띄워 개발자 도구 프로토콜로 다루므로, 390px 같은 휴대폰 너비도 그 너비 그대로 그립니다. 따로 설치할 것은 없습니다.
 - `--see-verify`: 화면 확인을 Stop 훅 검증에 넣습니다. 코덱스 기본 샌드박스 안에서는 코덱스가 직접 포트를 열 수 없지만, Stop 훅은 샌드박스 밖에서 돌기 때문에 이 검증은 동작합니다.
 - 스크린샷과 로그는 `artifacts/harness/see/`에 저장되고 `.gitignore`에 들어갑니다. 코덱스 샌드박스가 `.codex/` 쓰기를 막기 때문에 결과는 `.codex` 밖에 둡니다.
 

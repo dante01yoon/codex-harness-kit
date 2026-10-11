@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 - 2026-10-11
+
+- `harness.py see` now opens pages through the Chrome DevTools protocol and sets the viewport exactly. Headless Chrome will not make a window narrower than about 500px, so in 0.2.0 a `390x844` screenshot was a 500px layout cropped to 390px and phone layouts were never really checked. Viewports under 768px are emulated as a touch phone, so a page without `<meta name="viewport">` is laid out at 980px as on a real phone.
+- Console messages come from DevTools events: `console.*` calls, uncaught exceptions and failed loads, with their source. `console.error` is a problem even without an `Error:` prefix. The browser's own `/favicon.ico` request is ignored.
+- If DevTools cannot be reached, `see` falls back to the plain screenshot and says so.
+- Found while checking the book's demo screen with the kit: Codex opened the 390px screenshot, saw the right side cut off, and traced it to the browser, not the app.
+
 ## 0.2.0 - 2026-10-11
 
 Let Codex see what it built and follow project rules, not only be stopped.
