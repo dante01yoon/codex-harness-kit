@@ -127,7 +127,9 @@ def tail(path: str, n: int) -> List[str]:
 def shoot(chrome: str, url: str, w: int, h: int, png: str, wait_ms: int) -> Tuple[bool, List[str]]:
     prof = tempfile.mkdtemp(prefix="harness-see-")
     cmd = [chrome, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-           "--hide-scrollbars", f"--user-data-dir={prof}", f"--window-size={w},{h}",
+           "--hide-scrollbars", "--use-mock-keychain", "--password-store=basic", "--disable-extensions",
+           "--disable-background-networking", "--disable-component-update", "--disable-sync",
+           "--no-service-autorun", "--mute-audio", f"--user-data-dir={prof}", f"--window-size={w},{h}",
            f"--virtual-time-budget={wait_ms}", f"--screenshot={png}", "--enable-logging=stderr", "--v=0", url]
     timed_out = False
     kw: Dict[str, Any] = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True, "errors": "replace"}
@@ -153,9 +155,12 @@ def shoot(chrome: str, url: str, w: int, h: int, png: str, wait_ms: int) -> Tupl
     lines = []
     for m in CONSOLE.finditer(err or ""):
         lines.append(f"{m.group(1)}  ({m.group(2)}:{m.group(3)})")
-    if timed_out and not lines:
-        lines.append("browser did not exit in time; console output may be incomplete (Error: browser timeout)")
-    return os.path.exists(png), lines
+    shot = os.path.exists(png)
+    if timed_out and not shot:
+        # Console messages are logged while the page loads, before the screenshot. Without a
+        # screenshot the page may not have finished, so this is a problem, not a pass.
+        lines.append("browser did not finish before the timeout; no screenshot (Error: browser timeout)")
+    return shot, lines
 
 
 def main(argv: Optional[List[str]] = None) -> int:
