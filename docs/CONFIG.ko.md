@@ -62,3 +62,53 @@ macOS와 Windows에서는 파일 시스템이 대개 대소문자를 구분하�
 ```
 
 검증 명령이 오래 걸리면 `verify.total_timeout`을 늘리고 설치를 다시 실행하세요. Stop 훅의 제한 시간이 바뀌므로 다시 신뢰해야 합니다. 명령을 찾지 못하거나(종료 코드 127, `command not found`) 파이썬 모듈이 없으면(`No module named`) 구현 문제가 아니라 환경 문제로 보고, 코덱스에게 다시 시키지 않고 경고만 남깁니다.
+
+## 예: 프로젝트 규칙 (`lint`, 0.2)
+
+```json
+"lint": {
+  "rules": [
+    {
+      "id": "ui-no-money-math",
+      "files": ["ui/**/*.ts", "src/components/**/*.tsx"],
+      "exclude": ["**/*.test.*"],
+      "forbid": "\\b(refund|fee|price)\\w*\\s*[-+*/]",
+      "why": "금액은 src/rules에서 정한다. 화면에서 계산하면 규칙과 어긋난다.",
+      "fix": "src/rules의 함수를 불러 결과만 화면에 보여 준다."
+    }
+  ]
+}
+```
+
+- `files`·`exclude`는 경로 패턴, `forbid`는 파일 안에 나오면 안 되는 정규식입니다.
+- `why`와 `fix`는 코덱스가 읽고 바로 고칠 수 있게 씁니다. 위반하면 `파일:줄:열 [규칙] 이유`와 `고치는 법`이 출력됩니다.
+- 한 줄만 예외로 두려면 그 줄에 `harness-lint-ignore: <규칙 id>`와 이유를 주석으로 적습니다.
+- 이미 위반이 많은 프로젝트라면 사람이 `harness.py lint --baseline`을 실행해 지금 있는 위반을 `.codex/harness/lint-baseline.json`에 기록합니다. 이후에는 새 위반만 실패합니다. 코덱스는 이 명령을 실행할 수 없습니다.
+- 검증 명령에 넣으려면 설치할 때 `--lint`를 붙이거나 `verify.commands`에 `python3 .codex/harness/harness.py lint`를 더합니다.
+
+## 예: 화면 확인 (`see`, 0.2)
+
+```json
+"see": {
+  "url": "http://127.0.0.1:5173",
+  "start": "npm run dev -- --port 5173",
+  "pages": [{"name": "home", "path": "/"}, {"name": "bookings", "path": "/bookings"}],
+  "viewports": ["390x844", "1280x900"],
+  "out": "artifacts/harness/see",
+  "wait_ms": 2500,
+  "log": ""
+}
+```
+
+| 항목 | 뜻 |
+| --- | --- |
+| `url` | 앱의 주소. 이미 떠 있으면 그대로 씁니다 |
+| `start` | 앱이 떠 있지 않을 때 띄울 명령. 확인이 끝나면 다시 끕니다 |
+| `pages` | 확인할 화면. `name`은 스크린샷 파일 이름이 됩니다 |
+| `viewports` | 화면 크기. 기본은 휴대폰(390x844)과 데스크톱(1280x900) |
+| `out` | 스크린샷·`summary.txt`·서버 로그를 둘 폴더. `.codex` 밖이어야 합니다 |
+| `wait_ms` | 스크립트가 화면을 그릴 시간 |
+| `log` | 앱이 따로 로그 파일을 쓴다면 그 경로(비우면 `out/server.log`) |
+| `chrome` | Chrome·Chromium 경로(비우면 자동으로 찾음) |
+
+페이지가 응답하지 않거나(HTTP 4xx·5xx), 스크립트 예외, 실패한 리소스 로드, 콘솔 오류가 있으면 실패합니다. 스크린샷이 정상인지는 코덱스가 직접 열어 보고 판단합니다.

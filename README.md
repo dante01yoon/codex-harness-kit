@@ -2,7 +2,7 @@
 
 **English** | [한국어](README.ko.md)
 
-A per-project harness for OpenAI Codex that **keeps the agent away from your tests and verification criteria** and **makes it verify before it finishes**. One command installs these parts into a project:
+A per-project harness for OpenAI Codex that **keeps the agent away from your tests and verification criteria**, **makes it verify before it finishes**, and **lets it look at the screens it built and follow your project rules**. One command installs these parts into a project:
 
 | Role | Part | What it does |
 | --- | --- | --- |
@@ -11,6 +11,10 @@ A per-project harness for OpenAI Codex that **keeps the agent away from your tes
 | Check | Stop hook `verify.py` | Runs your tests and type checks before Codex ends a response; on failure Codex keeps fixing |
 | Notice | Protected-file snapshot at turn start and end | If a script or an MCP tool changed a protected file behind the guard's back, Codex is told to stop and report it when the turn ends |
 | Stop | Retry limit | When verification keeps failing, or Codex hands off with `BLOCKED`, it is not sent back again; a warning is left instead |
+| Rules (0.2, optional) | `harness.py lint` | Checks project rules (e.g. "UI code does not compute money or dates") and sends back the file, line and **how to fix it** |
+| See (0.2, optional) | `harness.py see` | Starts the app, takes screenshots per page, collects console errors, failed requests and the server log. As a verification step, Codex cannot finish with a broken screen |
+
+Blocking and checking keep Codex from bending the criteria; rules and seeing let it **check and fix its own work**. This follows what OpenAI describes in [Harness engineering](https://openai.com/index/harness-engineering/): make the app's UI and logs legible to the agent, and write custom lint messages that inject remediation instructions into the agent's context.
 
 It turns the harness built by hand in chapter 14 of the Korean book *Codex Complete Guide* (『코덱스 완벽 가이드』, "Harness engineering: designing the agent's working environment") into something you can install in any project. Python 3.9 standard library only; nothing else is installed.
 
@@ -35,6 +39,15 @@ Hook:  Verification ran before finishing and failed. ... test_full_refund_at_exa
 Codex: Exactly 120 minutes must refund 3,000, so I restored >=. Verification passes; tests and config unchanged.
 ```
 
+**Asked only to change a heading**, the screen check catches a console error and Codex fixes it too (0.2, a fresh Node app unrelated to the book).
+
+```text
+You:   Change the page heading from 'Todos' to 'My todos'. Nothing else.
+Codex: Changed the heading.
+Hook:  Verification ran before finishing and failed. ... [FAIL] page home ... Uncaught ReferenceError: lst is not defined (app.js:6)
+Codex: Heading changed to "My todos". The hook also required fixing `lst` to `list` in ui/app.js. Tests, lint and the screen check pass.
+```
+
 ## Quick start
 
 ```bash
@@ -55,6 +68,18 @@ Finally, **trust the hooks.** Codex silently skips new project hooks until a per
 
 - App: Settings > Hooks, open the project, confirm each Command runs this project's `.codex/harness/guard.py` and `verify.py`, then Trust all
 - CLI: `/hooks`
+
+### Turn on rules and the screen check (0.2)
+
+```bash
+python3 codex-harness-kit/install.py ~/projects/my-app --lint \
+  --see-url http://127.0.0.1:5173 --see-start "npm run dev" --see-verify
+```
+
+- `--lint` runs `lint.rules` from `harness.json` before Codex finishes. A rule has `files`, `forbid` (a regex that must not appear), `why` and `fix`. In an existing project a person can run `harness.py lint --baseline` to record today's violations so only new ones fail (Codex is blocked from running it).
+- `--see-url`, `--see-start` turn on the screen check. If the app is not up, it is started with that command and stopped afterwards. List screens in `see.pages`. It uses an installed Chrome, Chromium or Edge in headless mode; nothing else is installed.
+- `--see-verify` adds the screen check to the Stop hook. Codex cannot open a port inside its default sandbox, but the Stop hook runs outside the sandbox, so this check works.
+- Screenshots and logs go to `artifacts/harness/see/` (git-ignored). They stay outside `.codex/` because the Codex sandbox cannot write there.
 
 Commit `.codex/` and `AGENTS.md` so everyone on the repository gets the same harness (each person still trusts the hooks once).
 
@@ -95,6 +120,9 @@ python3 .codex/harness/harness.py check --bash "rm -rf tests"  # would this comm
 python3 .codex/harness/harness.py verify                       # run the verification commands now
 python3 .codex/harness/harness.py log -n 20                    # recent decisions
 python3 .codex/harness/harness.py ci --base origin/main        # fail when a branch changed protected paths (for CI)
+python3 .codex/harness/harness.py lint                         # project rules (0.2)
+python3 .codex/harness/harness.py lint --baseline              # person only: record today's violations as known (0.2)
+python3 .codex/harness/harness.py see                          # start the app, take screenshots, collect console errors (0.2)
 ```
 
 Hooks run only on your machine, so check again in CI on a shared repository. A GitHub Actions example:
@@ -111,8 +139,9 @@ Set `mode` in `harness.json` to `"observe"` for a few days. Nothing is blocked; 
 
 ## Quality
 
-- **53 unit tests** (`python3 -m unittest discover -s tests`) run the guard, the Stop hook and the installer in temporary git repositories, calling the hooks exactly as `hooks.json` has them, from subfolders too. The regression corpus in `tests/test_probes.py`, built from a separate red-team pass, holds 94 commands that must be blocked, 64 that must pass and 6 documented gaps, and checks that each decision takes less than 3 seconds.
+- **67 unit tests** (`python3 -m unittest discover -s tests`) run the guard, the Stop hook and the installer in temporary git repositories, calling the hooks exactly as `hooks.json` has them, from subfolders too. The regression corpus in `tests/test_probes.py`, built from a separate red-team pass, holds 94 commands that must be blocked, 64 that must pass and 6 documented gaps, and checks that each decision takes less than 3 seconds.
 - **Checked with real Codex** (`scripts/e2e_codex.py`): installs into throwaway projects and asks `codex exec` to edit a test, write a live key, switch the harness off, break the code without running tests, and run a script that edits a test behind the guard's back. Results: [VERIFICATION.md](docs/VERIFICATION.md).
+- **Rules and screen check with real Codex** (`scripts/e2e_see_lint.py`, 0.2): builds a fresh Node todo app and a Python loans app unrelated to the book, installs the kit and asks for a feature. All three scenarios passed; asked only to change a heading, the screen check caught a console error and Codex fixed it as well.
 - **CI** runs the tests and every preset's examples on Ubuntu and macOS with Python 3.9 and 3.12.
 
 ## Use it with other tools
@@ -136,7 +165,8 @@ When a hook command changes, Codex asks you to trust it again.
 ## Requirements
 
 - Python 3.9 or later (the `python3` that ships with macOS is enough) and git
-- Codex CLI, or Codex in the ChatGPT app, with hook support. Verified with Codex CLI 0.161.0 on macOS. Windows has a `commandWindows` entry but has not been tested.
+- For the screen check (`see`): Chrome, Chromium or Edge (run headless)
+- Codex CLI, or Codex in the ChatGPT app, with hook support. Verified with Codex CLI 0.161.0 on macOS. Windows has a `commandWindows` entry but has not been tested. According to [openai/codex#24453](https://github.com/openai/codex/issues/24453), PreToolUse may not fire for shell commands on Windows; there, rely on the end-of-turn check and CI.
 
 ## License
 

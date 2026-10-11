@@ -26,11 +26,11 @@ KIT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(KIT, "kit", ".codex", "harness")
 TEMPLATES = os.path.join(KIT, "kit", "templates")
 PRESETS = os.path.join(KIT, "presets")
-SCRIPTS = ["harnesslib.py", "guard.py", "verify.py", "harness.py"]
+SCRIPTS = ["harnesslib.py", "guard.py", "verify.py", "harness.py", "lint.py", "see.py"]
 MARK_START = "<!-- codex-harness-kit:start -->"
 MARK_END = "<!-- codex-harness-kit:end -->"
 GITIGNORE_LINE = ".codex/harness/logs/"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 sys.path.insert(0, SRC)
 import harnesslib as hl  # noqa: E402
@@ -276,7 +276,27 @@ def agents_block(cfg: Dict[str, Any], lang: str) -> str:
     tpl = read(os.path.join(TEMPLATES, f"AGENTS.harness.{lang}.md")) or ""
     cmds = "\n".join(f"  - `{c['run']}`" for c in cfg["verify"]["commands"]) or "  - (none configured)"
     paths = ", ".join(f"`{p}`" for p in cfg["protect"]["paths"])
-    return f"{MARK_START}\n" + tpl.format(verify_commands=cmds, protected=paths).strip() + f"\n{MARK_END}\n"
+    body = tpl.format(verify_commands=cmds, protected=paths).strip()
+    extra = []
+    if cfg.get("lint", {}).get("rules") or any("harness.py lint" in c["run"] for c in cfg["verify"]["commands"]):
+        extra.append(EXTRA[lang]["lint"])
+    if cfg.get("see", {}).get("url"):
+        extra.append(EXTRA[lang]["see"].format(out=cfg["see"].get("out", "artifacts/harness/see")))
+    if extra:
+        body += "\n" + "\n".join(extra)
+    return f"{MARK_START}\n" + body + f"\n{MARK_END}\n"
+
+
+EXTRA = {
+    "ko": {
+        "lint": "- 프로젝트 규칙은 `python3 .codex/harness/harness.py lint`로 확인한다. 위반 메시지의 `고치는 법`대로 구현을 고치고, 규칙을 지우거나 끄지 않는다. 같은 실수가 반복되면 새 규칙을 제안한다.",
+        "see": "- 화면을 바꾸면 `python3 .codex/harness/harness.py see`로 앱을 띄워 스크린샷과 콘솔 오류를 모은다. `{out}/`의 스크린샷을 직접 열어 보고, 깨지거나 겹치거나 비어 보이면 고친 뒤 다시 확인한다. 샌드박스 때문에 직접 띄우지 못해도 BLOCKED가 아니다. 응답을 마치기 직전 Stop 훅이 샌드박스 밖에서 화면 확인을 대신 실행한다.",
+    },
+    "en": {
+        "lint": "- Check project rules with `python3 .codex/harness/harness.py lint`. Fix the implementation as each violation's `fix` says; do not remove or disable rules. If the same mistake keeps happening, propose a new rule.",
+        "see": "- After changing the UI, run `python3 .codex/harness/harness.py see` to start the app, take screenshots and collect console errors. Open the screenshots in `{out}/` yourself; if anything is broken, overlapping or empty, fix it and check again. If the sandbox stops you from starting the app, that is not BLOCKED: the Stop hook runs the screen check outside the sandbox right before you finish.",
+    },
+}
 
 
 def replace_block(text: str, block: Optional[str]) -> str:
@@ -370,6 +390,10 @@ def plan_install(target: str, args, plan: Plan) -> None:
         cfg_text = config_text(cfg)
         plan.note(f"preset: {preset}")
     lang = cfg.get("lang", args.lang)
+    if apply_options(cfg, args):
+        if cfg_text is None:
+            plan.note("updated .codex/harness/harness.json with --lint / --see options")
+        cfg_text = config_text(cfg)
 
     # 2. plan the writes
     for s in SCRIPTS:
@@ -391,8 +415,12 @@ def plan_install(target: str, args, plan: Plan) -> None:
         plan.write(doc, read(os.path.join(TEMPLATES, f"harness.{lang}.md")) or "", "how this harness works")
     gi = os.path.join(target, ".gitignore")
     gtext = read(gi) or ""
-    if GITIGNORE_LINE not in gtext.splitlines():
-        plan.write(gi, gtext + ("" if not gtext or gtext.endswith("\n") else "\n") + GITIGNORE_LINE + "\n", "ignore hook logs")
+    want = [GITIGNORE_LINE]
+    if cfg.get("see", {}).get("url"):
+        want.append(cfg["see"].get("out", "artifacts/harness/see").rstrip("/") + "/")
+    missing = [w for w in want if w not in gtext.splitlines()]
+    if missing:
+        plan.write(gi, gtext + ("" if not gtext or gtext.endswith("\n") else "\n") + "\n".join(missing) + "\n", "ignore hook logs and screenshots")
 
     # 3. tell the user what was decided
     for c in cfg["verify"]["commands"]:
@@ -406,6 +434,35 @@ def plan_install(target: str, args, plan: Plan) -> None:
         plan.note(".codex/config.toml also defines [hooks]; Codex merges both and warns. Prefer one place.")
     if re.search(r"^\s*(codex_)?hooks\s*=\s*false", toml, re.M):
         plan.note(".codex/config.toml sets hooks = false, so no hook will run")
+
+
+LINT_CMD = "python3 .codex/harness/harness.py lint"
+SEE_CMD = "python3 .codex/harness/harness.py see"
+
+
+def apply_options(cfg: Dict[str, Any], args) -> bool:
+    """Apply --lint / --see-url / --see-start. Returns True when cfg changed."""
+    changed = False
+    if getattr(args, "lint", False) and not any(c["run"] == LINT_CMD for c in cfg["verify"]["commands"]):
+        cfg["verify"]["commands"].append({"name": "lint", "run": LINT_CMD, "timeout": 120})
+        changed = True
+    see = cfg.setdefault("see", dict(hl.DEFAULTS["see"]))
+    if getattr(args, "see_verify", False) and not any(c["run"] == SEE_CMD for c in cfg["verify"]["commands"]):
+        cfg["verify"]["commands"].append({"name": "see", "run": SEE_CMD, "timeout": 240})
+        changed = True
+    if getattr(args, "see_url", None):
+        see["url"] = args.see_url
+        changed = True
+    if getattr(args, "see_start", None):
+        see["start"] = args.see_start
+        changed = True
+    if SEE_CMD in [c["run"] for c in cfg["verify"]["commands"]] and not see.get("url"):
+        raise InstallError("--see-verify needs --see-url")
+    if changed:
+        errs = hl.validate(hl._merge(hl.DEFAULTS, cfg))
+        if errs:
+            raise InstallError("; ".join(errs))
+    return changed
 
 
 def run(args) -> int:
@@ -454,6 +511,10 @@ def main(argv: List[str]) -> int:
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--force", action="store_true", help="regenerate harness.json from the preset")
     p.add_argument("--no-agents", action="store_true", help="do not touch AGENTS.md")
+    p.add_argument("--lint", action="store_true", help="run project rules (lint.rules) as part of verification")
+    p.add_argument("--see-url", help="base URL of the app for the screen check, e.g. http://127.0.0.1:5173")
+    p.add_argument("--see-start", help="command that starts the app when the URL is not up, e.g. \"npm run dev\"")
+    p.add_argument("--see-verify", action="store_true", help="also run the screen check before Codex finishes (needs --see-url)")
     p.add_argument("--uninstall", action="store_true")
     p.add_argument("--purge", action="store_true", help="with --uninstall, also delete settings, logs and generated files")
     args = p.parse_args(argv)

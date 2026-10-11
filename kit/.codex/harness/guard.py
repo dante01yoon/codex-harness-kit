@@ -69,7 +69,7 @@ FORMAT_WITH = {
     "rubocop": {"-a", "-A", "--autocorrect", "--autocorrect-all"}, "cargo": {"fmt", "fix"},
 }
 SEPARATORS = set(";&|()\n")
-DEFAULT_UPDATE_FLAGS = ["-u", "--update", "--updateSnapshot", "--update-snapshots", "--snapshot-update"]
+DEFAULT_UPDATE_FLAGS = ["-u", "--update", "--updateSnapshot", "--update-snapshots", "--snapshot-update", "--baseline"]
 WRITE_MARKERS = re.compile(
     r"""(['"](?:w|a|x|wb|ab|w\+|a\+|r\+)['"]|\bwrite|\bunlink|\bremove|\brmtree|\brmSync|\brmdir|"""
     r"""\brename|\breplace\(|\btruncate|\bmkdir|\bcopy|\bmove|\bsymlink|\bchmod|appendFile|\bfs\.rm)""")
@@ -536,6 +536,10 @@ def check_shell(cmd: str, ctx: Ctx, depth: int = 0) -> List[Finding]:
                 out += pipeline_paths(ctx, segs, idx, base)
             continue
         if name in INTERPRETERS or re.match(r"^python3?(\.\d+)?$", name):
+            flag = update_flag(ctx, words)
+            if flag and (allowlisted(ctx, words) or any(".codex/harness/" in a.replace("\\", "/") for a in args)):
+                out.append(finding("update_flag", " ".join(words), flag))
+                continue
             code_parts = []
             for flag in ("-c", "-e", "--eval", "-p", "--print"):
                 if flag in args and args.index(flag) + 1 < len(args):
