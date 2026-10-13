@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2 - 2026-10-13
+
+- The turn-start/turn-end protected-file snapshot no longer compares files inside linked git worktrees nested in the project (`git worktree add .worktrees/<name>`). Their copy of a protected file is another checkout of the same file, not a change to it, but the snapshot walked the whole tree: creating a worktree during a turn made the Stop hook report `.worktrees/<name>/tests/...` as "changed behind the guard's back", tell Codex to stop with BLOCKED, and end the run unfinished (seen with Codex CLI 0.162.1).
+- The snapshot also skips untracked paths that git ignores (`.worktrees/`, build output). Tracked files are always compared, even when they match a `.gitignore` pattern. Both lists come from git (`git worktree list --porcelain`, `git ls-files -o -i --exclude-standard --directory`); without git, or if git does not answer, the snapshot compares everything as before.
+- Unchanged: the PreToolUse guard still denies edits to protected files inside a nested worktree (`.worktrees/<name>/tests/...` matches `tests/`), and an out-of-band edit of a protected file in the main checkout is still reported. A project root that is itself a linked worktree is covered in full. `harness.json` has no new keys.
+- Trade-off: a script that rewrites a protected file inside a nested worktree or an ignored path is no longer noticed at the end of the turn. The guard still stops direct edits there.
+- Tests: creating a nested worktree in a turn, ignored paths, the guard denying `Bash` and `apply_patch` edits in the worktree, an out-of-band edit next to a worktree, a project that is itself a worktree, a tracked file that matches `.gitignore`, and a project without git.
+
 ## 0.2.1 - 2026-10-11
 
 - `harness.py see` now opens pages through the Chrome DevTools protocol and sets the viewport exactly. Headless Chrome will not make a window narrower than about 500px, so in 0.2.0 a `390x844` screenshot was a 500px layout cropped to 390px and phone layouts were never really checked. Viewports under 768px are emulated as a touch phone, so a page without `<meta name="viewport">` is laid out at 980px as on a real phone.

@@ -313,13 +313,53 @@ def load_config() -> Dict[str, Any]:
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", ".tox", ".nox", "dist", "build", ".next", "target"}
 
 
+def _git_output(root: str, args: List[str], timeout: int) -> Optional[str]:
+    try:
+        out = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout if out.returncode == 0 else None
+
+
+def nested_worktrees(root: str) -> List[str]:
+    """Linked git worktrees that live inside `root`, relative to it.
+
+    A worktree is another checkout of the same files, so its copy of a protected file is
+    not a change to the protected file. `root` itself is never listed, even when it is a
+    linked worktree, and neither are worktrees outside it.
+    """
+    out = _git_output(root, ["worktree", "list", "--porcelain"], 10)
+    found = []
+    for line in (out or "").splitlines():
+        if line.startswith("worktree "):
+            rel = to_rel(line[len("worktree "):], root, root)
+            if rel and rel != ".":
+                found.append(rel)
+    return found
+
+
+def ignored_paths(root: str) -> List[str]:
+    """Untracked paths git ignores (`.worktrees/`, build output, ...), relative to `root`.
+
+    Tracked files are never listed, so a protected file stays covered even if it matches
+    a .gitignore pattern. Ignored directories come back as one entry, not file by file.
+    """
+    out = _git_output(root, ["ls-files", "-o", "-i", "--exclude-standard", "--directory", "-z"], 20)
+    return [p.rstrip("/") for p in (out or "").split("\0") if p]
+
+
 def protected_snapshot(root: str, rules: "PathRules", limit: int = 50000) -> Dict[str, str]:
-    """Content hashes of every existing file that matches the protect rules."""
+    """Content hashes of every existing file that matches the protect rules.
+
+    Linked worktrees nested in the project and git-ignored paths are left out. Without
+    git, or when git cannot answer, nothing extra is left out.
+    """
     out: Dict[str, str] = {}
+    skip = set(nested_worktrees(root)) | set(ignored_paths(root))
     seen = 0
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and (d if rel_dir == "." else f"{rel_dir}/{d}") not in skip]
         if rel_dir.startswith(".codex/harness/logs"):
             continue
         for name in filenames:
@@ -327,7 +367,7 @@ def protected_snapshot(root: str, rules: "PathRules", limit: int = 50000) -> Dic
             if seen > limit:
                 return out
             rel = name if rel_dir == "." else f"{rel_dir}/{name}"
-            if not rules.match(rel):
+            if rel in skip or not rules.match(rel):
                 continue
             try:
                 with open(os.path.join(dirpath, name), "rb") as f:

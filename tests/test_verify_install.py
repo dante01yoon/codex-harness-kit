@@ -11,6 +11,9 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 KIT = os.path.dirname(HERE)
 INSTALL = os.path.join(KIT, "install.py")
+sys.path.insert(0, os.path.join(KIT, "kit", ".codex", "harness"))
+
+import harnesslib as hl  # noqa: E402
 
 CHECK = """import sys, pathlib
 state = pathlib.Path('state.txt').read_text().strip()
@@ -195,6 +198,117 @@ class Backstop(unittest.TestCase):
             f.write("# human edit\n")
         call_hook(self.root, "UserPromptSubmit", {"prompt": "x", "cwd": self.root})
         self.assertEqual(call_hook(self.root, "Stop", {"turn_id": "t", "stop_hook_active": False, "cwd": self.root}), {})
+
+
+class NestedWorktree(unittest.TestCase):
+    """`git worktree add .worktrees/<name>` inside the project: the checkout copy is not a change."""
+
+    def setUp(self):
+        self.tmp, self.root = new_repo()
+        r = run_install(self.root, "--preset", "generic", "--lang", "en", "--verify", "python3 check.py")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.wt = os.path.join(self.root, ".worktrees", "allow-zero-people")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def snapshot(self):
+        call_hook(self.root, "UserPromptSubmit", {"hook_event_name": "UserPromptSubmit", "prompt": "x", "cwd": self.root})
+
+    def stop(self):
+        return call_hook(self.root, "Stop", {"turn_id": "t", "stop_hook_active": False, "cwd": self.root})
+
+    def add_worktree(self):
+        git(self.root, "worktree", "add", "-q", self.wt, "-b", "allow-zero-people")
+        self.assertTrue(os.path.exists(os.path.join(self.wt, "tests", "check.sh")), "the copy of a protected file must exist")
+
+    def pre_tool_use(self, payload, cwd=None):
+        out = call_hook(self.root, "PreToolUse", dict(payload, cwd=cwd or self.root), cwd=cwd)
+        return out.get("hookSpecificOutput", {}).get("permissionDecision")
+
+    def test_creating_a_worktree_during_a_turn_is_not_a_protected_change(self):
+        self.snapshot()
+        self.add_worktree()
+        self.assertEqual(self.stop(), {})
+
+    def test_git_ignored_paths_are_not_compared(self):
+        with open(os.path.join(self.root, ".gitignore"), "w") as f:
+            f.write(".worktrees/\n")
+        self.snapshot()
+        self.add_worktree()
+        self.assertEqual(self.stop(), {})
+        self.snapshot()
+        copy = os.path.join(self.root, ".worktrees", "plain-copy", "tests")  # ignored, not a worktree
+        os.makedirs(copy)
+        with open(os.path.join(copy, "check.sh"), "w") as f:
+            f.write("true\n")
+        self.assertEqual(self.stop(), {})
+
+    def test_guard_still_denies_edits_to_protected_files_inside_the_worktree(self):
+        self.add_worktree()
+        shell = {"tool_name": "Bash", "tool_input": {"command": "echo 'exit 0' >> .worktrees/allow-zero-people/tests/check.sh"}}
+        self.assertEqual(self.pre_tool_use(shell), "deny")
+        patch = "*** Begin Patch\n*** Update File: tests/check.sh\n@@\n-true\n+exit 0\n*** End Patch"
+        self.assertEqual(self.pre_tool_use({"tool_name": "apply_patch", "tool_input": {"command": patch}}, cwd=self.wt), "deny")
+        source = {"tool_name": "Bash", "tool_input": {"command": "echo x >> .worktrees/allow-zero-people/src/app.py"}}
+        self.assertIsNone(self.pre_tool_use(source), "implementation files in the worktree stay editable")
+
+    def test_out_of_band_edit_in_the_main_checkout_is_still_reported(self):
+        self.add_worktree()
+        self.snapshot()
+        with open(os.path.join(self.root, "tests", "check.sh"), "a") as f:
+            f.write("exit 0\n")  # as if a script the agent ran had done it
+        out = self.stop()
+        self.assertEqual(out.get("decision"), "block")
+        self.assertIn("tests/check.sh", out["reason"])
+        self.assertNotIn(".worktrees", out["reason"])
+
+
+class SnapshotScope(unittest.TestCase):
+    """What `protected_snapshot` looks at, checked on the function directly."""
+
+    def setUp(self):
+        self.tmp, self.root = new_repo()
+        self.rules = hl.PathRules(["tests/"])
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_project_that_is_itself_a_linked_worktree_is_fully_covered(self):
+        other = tempfile.TemporaryDirectory()
+        try:
+            linked = os.path.join(os.path.realpath(other.name), "linked")
+            git(self.root, "worktree", "add", "-q", linked, "-b", "linked")
+            self.assertEqual(sorted(hl.protected_snapshot(linked, self.rules)), ["tests/check.sh"])
+        finally:
+            other.cleanup()
+
+    def test_only_worktrees_inside_the_project_are_left_out(self):
+        project = os.path.join(self.root, "apps", "web")
+        os.makedirs(os.path.join(project, "tests"))
+        with open(os.path.join(project, "tests", "a.sh"), "w") as f:
+            f.write("true\n")
+        git(self.root, "add", "-A")
+        git(self.root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "web")
+        git(self.root, "worktree", "add", "-q", os.path.join(project, ".worktrees", "inner"), "-b", "inner")
+        git(self.root, "worktree", "add", "-q", os.path.join(self.root, "elsewhere"), "-b", "elsewhere")
+        self.assertEqual(hl.nested_worktrees(project), [".worktrees/inner"], "neither the checkout above nor a worktree beside the project")
+        self.assertEqual(sorted(hl.protected_snapshot(project, self.rules)), ["tests/a.sh"])
+
+    def test_a_tracked_file_stays_covered_even_when_it_matches_gitignore(self):
+        with open(os.path.join(self.root, ".gitignore"), "w") as f:
+            f.write("tests/\n")
+        self.assertEqual(sorted(hl.protected_snapshot(self.root, self.rules)), ["tests/check.sh"])
+
+    def test_without_git_everything_is_still_covered(self):
+        plain = tempfile.TemporaryDirectory()
+        try:
+            os.makedirs(os.path.join(plain.name, "tests"))
+            with open(os.path.join(plain.name, "tests", "a.sh"), "w") as f:
+                f.write("true\n")
+            self.assertEqual(sorted(hl.protected_snapshot(os.path.realpath(plain.name), self.rules)), ["tests/a.sh"])
+        finally:
+            plain.cleanup()
 
 
 class VerifyEdges(unittest.TestCase):

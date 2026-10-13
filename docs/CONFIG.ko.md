@@ -18,7 +18,7 @@
 | `verify.commands` | 감지 결과 | `{"name", "run", "timeout", "cwd", "stop_on_failure"}` 목록. 순서대로 실행합니다 |
 | `verify.skip_when_unchanged` | `true` | 마지막 통과 뒤로 바뀐 파일이 없으면 검증을 건너뜁니다. 질문만 한 턴이 느려지지 않습니다. git 저장소에서만 동작합니다 |
 | `verify.total_timeout` | `570` | 검증 명령 전체에 쓰는 최대 시간(초). 명령마다의 `timeout`은 남은 시간 안에서만 씁니다. Stop 훅의 제한 시간은 설치할 때 이 값 + 30초(최대 600초)로 정합니다 |
-| `verify.check_protected_changes` | `true` | 턴을 시작할 때(UserPromptSubmit) 보호 파일의 해시를 기억해 두고, 턴이 끝날 때 바뀐 파일이 있으면 알립니다. 가드가 보지 못한 경로(스크립트, MCP 도구)로 바뀐 경우를 잡습니다 |
+| `verify.check_protected_changes` | `true` | 턴을 시작할 때(UserPromptSubmit) 보호 파일의 해시를 기억해 두고, 턴이 끝날 때 바뀐 파일이 있으면 알립니다. 가드가 보지 못한 경로(스크립트, MCP 도구)로 바뀐 경우를 잡습니다. 프로젝트 안에 만든 git 워크트리(`.worktrees/<이름>`)와 git이 무시하는 추적되지 않은 경로는 비교하지 않습니다. 그 안의 편집은 가드가 그대로 막습니다 |
 | `verify.max_continuations_per_turn` | `2` | 검증 실패로 코덱스를 다시 일하게 하는 최대 횟수. 넘으면 멈추고 경고만 남깁니다 |
 | `verify.respect_blocked` | `true` | 코덱스의 마지막 메시지에 `BLOCKED`가 있으면(사람에게 넘기고 멈춘 경우) 검증이 실패해도 다시 일하게 하지 않고 경고만 남깁니다 |
 | `verify.output_tail_lines` | `40` | 실패한 명령의 출력 중 코덱스에게 보여 줄 마지막 줄 수 |

@@ -30,7 +30,7 @@ codex-harness-kit is designed against a **cooperative agent under pressure to fi
 
 The cases below are not blocked before they run. They are listed in `KNOWN_GAPS` in `tests/test_probes.py`, and the tests assert that they still pass. If the guard starts catching one, that test fails and this document is updated with it.
 
-However, **if a protected file actually changes, it is noticed at the end of the turn.** Hashes of protected files are taken when a turn starts (UserPromptSubmit hook) and compared when it ends (Stop hook); if anything changed, Codex is told to stop and report it. The change is not undone, but it does not pass silently. Reading a secret file is not caught this way.
+However, **if a protected file actually changes, it is noticed at the end of the turn.** Hashes of protected files are taken when a turn starts (UserPromptSubmit hook) and compared when it ends (Stop hook); if anything changed, Codex is told to stop and report it. The change is not undone, but it does not pass silently. Reading a secret file is not caught this way. Linked git worktrees nested in the project and untracked paths git ignores are not part of the comparison (a worktree's copy of a test is not the protected file); a script that rewrites a protected file there passes unnoticed, while the guard still blocks direct edits.
 
 | Case | Why |
 | --- | --- |

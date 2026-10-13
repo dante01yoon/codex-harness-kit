@@ -18,7 +18,7 @@ Installing creates `harness.json` from a preset. Reinstalling never overwrites i
 | `verify.commands` | detected | A list of `{"name", "run", "timeout", "cwd", "stop_on_failure"}`, run in order |
 | `verify.skip_when_unchanged` | `true` | Skip verification when nothing changed since the last pass, so question-only turns stay fast. Needs a git repository |
 | `verify.total_timeout` | `570` | Seconds for all verification commands together. Each command's `timeout` only applies within what is left. At install time the Stop hook timeout is set to this value + 30 s (at most 600 s) |
-| `verify.check_protected_changes` | `true` | Remember hashes of protected files at the start of a turn (UserPromptSubmit) and report files that changed by the end. Catches changes made through paths the guard cannot see (scripts, MCP tools) |
+| `verify.check_protected_changes` | `true` | Remember hashes of protected files at the start of a turn (UserPromptSubmit) and report files that changed by the end. Catches changes made through paths the guard cannot see (scripts, MCP tools). Linked git worktrees nested in the project (`.worktrees/<name>`) and untracked paths git ignores are not compared; the guard still protects edits inside them |
 | `verify.max_continuations_per_turn` | `2` | How many times a failed verification may send Codex back to work. After that it stops and leaves a warning |
 | `verify.respect_blocked` | `true` | If Codex's last message has a line starting with `BLOCKED` (it handed off to a human), a failed verification does not send it back; a warning is left instead |
 | `verify.output_tail_lines` | `40` | How many trailing lines of a failed command's output Codex sees |

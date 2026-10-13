@@ -6,7 +6,8 @@
 
 At Stop:
 1. If a protected file changed during the turn (through a path the guard cannot see, such as
-   a script or an MCP tool), Codex is told to stop and report it.
+   a script or an MCP tool), Codex is told to stop and report it. Linked worktrees nested in
+   the project and git-ignored paths are not compared.
 2. Otherwise the verification commands run. On failure Codex keeps working with the output
    as its next prompt, up to `verify.max_continuations_per_turn` times, unless it already
    handed off with BLOCKED. A missing command or module is reported as an environment
