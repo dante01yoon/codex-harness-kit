@@ -89,7 +89,7 @@ python3 codex-harness-kit/install.py ~/projects/my-app --lint \
 my-app/
 ├── AGENTS.md                      # 하네스 규칙 블록(기존 내용은 그대로 두고 표시된 블록만 관리)
 ├── docs/harness.md                # 이 프로젝트의 하네스 설명
-├── .gitignore                     # .codex/harness/logs/ 추가
+├── .gitignore                     # .codex/harness/logs/ 와 .codex/harness/__pycache__/ 추가
 └── .codex/
     ├── hooks.json                 # UserPromptSubmit·Stop → verify.py, PreToolUse → guard.py (기존 훅은 백업 후 병합)
     └── harness/
@@ -157,7 +157,7 @@ python3 .codex/harness/harness.py see                          # 앱을 띄워 �
 ```bash
 git -C codex-harness-kit pull && python3 codex-harness-kit/install.py ~/projects/my-app   # 스크립트만 갱신, harness.json은 유지
 python3 codex-harness-kit/install.py ~/projects/my-app --uninstall           # 훅·스크립트·AGENTS.md 블록 제거
-python3 codex-harness-kit/install.py ~/projects/my-app --uninstall --purge   # 설정·기록, 손대지 않은 docs/harness.md, .gitignore 줄까지 제거
+python3 codex-harness-kit/install.py ~/projects/my-app --uninstall --purge   # 설정·기록, 손대지 않은 docs/harness.md, .gitignore에 넣은 줄까지 제거
 ```
 
 훅 명령이 바뀌면 코덱스가 다시 신뢰를 요구합니다.

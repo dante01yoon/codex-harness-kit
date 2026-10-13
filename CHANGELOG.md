@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3 - 2026-10-13
+
+- The installer now git-ignores `.codex/harness/__pycache__/` next to `.codex/harness/logs/`. Running `harness.py doctor` or any hook writes bytecode there, so after `install.py` a plain `git add -A` staged the `.pyc` files, and once committed, later hook runs showed them as modified tracked files.
+- Re-running the installer on a project installed with 0.2.1 or earlier appends the missing line; your own `.gitignore` lines are kept as they are.
+- `--uninstall --purge` removes both lines it added and nothing else. If the project already committed the `.pyc` files, run `git rm -r --cached .codex/harness/__pycache__` once.
+- Tests: a temporary git repository is installed, `harness.py doctor` is run with bytecode writing forced on, and `git status` must list no `__pycache__` or `.pyc` entry. A second test covers merging into an existing `.gitignore` and purging.
+
 ## 0.2.2 - 2026-10-13
 
 - The turn-start/turn-end protected-file snapshot no longer compares files inside linked git worktrees nested in the project (`git worktree add .worktrees/<name>`). Their copy of a protected file is another checkout of the same file, not a change to it, but the snapshot walked the whole tree: creating a worktree during a turn made the Stop hook report `.worktrees/<name>/tests/...` as "changed behind the guard's back", tell Codex to stop with BLOCKED, and end the run unfinished (seen with Codex CLI 0.162.1).

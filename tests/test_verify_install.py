@@ -404,6 +404,32 @@ class Installer(unittest.TestCase):
         self.assertTrue(any(n.startswith("hooks.json.bak-") for n in os.listdir(os.path.join(self.root, ".codex"))))
         self.assertEqual(self.read(".gitignore").count(".codex/harness/logs/"), 1)
 
+    def test_bytecode_caches_stay_out_of_git(self):
+        run_install(self.root, "--preset", "generic", "--lang", "en", "--verify", "python3 check.py")
+        env = {k: v for k, v in os.environ.items() if k not in ("PYTHONDONTWRITEBYTECODE", "PYTHONPYCACHEPREFIX")}
+        # Apple's python3 keeps bytecode under ~/Library/Caches unless pycache_prefix is cleared, which would hide the bug
+        r = subprocess.run([sys.executable, "-X", "pycache_prefix=", ".codex/harness/harness.py", "doctor"],
+                           cwd=self.root, env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        cache = os.path.join(self.root, ".codex", "harness", "__pycache__")
+        self.assertTrue(any(n.endswith(".pyc") for n in os.listdir(cache)), "doctor wrote no bytecode, so this test would prove nothing")
+        git(self.root, "add", "-A")
+        status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=self.root, capture_output=True, text=True, check=True).stdout
+        self.assertNotIn("__pycache__", status)
+        self.assertNotIn(".pyc", status)
+
+    def test_gitignore_merge_and_purge_touch_only_our_lines(self):
+        path = os.path.join(self.root, ".gitignore")
+        with open(path, "w") as f:
+            f.write("node_modules/\n.codex/harness/logs/\n")
+        ours = ["node_modules/", ".codex/harness/logs/", ".codex/harness/__pycache__/"]
+        run_install(self.root)
+        self.assertEqual(self.read(".gitignore").splitlines(), ours)
+        run_install(self.root)
+        self.assertEqual(self.read(".gitignore").splitlines(), ours)
+        run_install(self.root, "--uninstall", "--purge")
+        self.assertEqual(self.read(".gitignore"), "node_modules/\n")
+
     def test_keeps_existing_config_unless_forced(self):
         run_install(self.root, "--verify", "python3 check.py")
         edit_config(self.root, lambda c: c.update(lang="en"))

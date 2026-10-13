@@ -29,8 +29,8 @@ PRESETS = os.path.join(KIT, "presets")
 SCRIPTS = ["harnesslib.py", "guard.py", "verify.py", "harness.py", "lint.py", "see.py"]
 MARK_START = "<!-- codex-harness-kit:start -->"
 MARK_END = "<!-- codex-harness-kit:end -->"
-GITIGNORE_LINE = ".codex/harness/logs/"
-VERSION = "0.2.2"
+GITIGNORE_LINES = (".codex/harness/logs/", ".codex/harness/__pycache__/")
+VERSION = "0.2.3"
 
 sys.path.insert(0, SRC)
 import harnesslib as hl  # noqa: E402
@@ -345,12 +345,12 @@ def plan_uninstall(target: str, purge: bool, plan: Plan) -> None:
                 plan.remove(os.path.join(target, "docs", "harness.md"), "unchanged template")
         gi = os.path.join(target, ".gitignore")
         gtext = read(gi)
-        if gtext and GITIGNORE_LINE in gtext.splitlines():
-            kept = [l for l in gtext.splitlines() if l != GITIGNORE_LINE]
+        if gtext and any(l in GITIGNORE_LINES for l in gtext.splitlines()):
+            kept = [l for l in gtext.splitlines() if l not in GITIGNORE_LINES]
             if any(l.strip() for l in kept):
-                plan.write(gi, "\n".join(kept) + "\n", "harness line removed")
+                plan.write(gi, "\n".join(kept) + "\n", "harness lines removed")
             else:
-                plan.remove(gi, "it only held the harness line")
+                plan.remove(gi, "it only held the harness lines")
         baks = [n for n in os.listdir(os.path.join(target, ".codex"))] if os.path.isdir(os.path.join(target, ".codex")) else []
         baks = [n for n in baks if n.startswith("hooks.json.bak-")]
         if baks:
@@ -415,12 +415,12 @@ def plan_install(target: str, args, plan: Plan) -> None:
         plan.write(doc, read(os.path.join(TEMPLATES, f"harness.{lang}.md")) or "", "how this harness works")
     gi = os.path.join(target, ".gitignore")
     gtext = read(gi) or ""
-    want = [GITIGNORE_LINE]
+    want = list(GITIGNORE_LINES)
     if cfg.get("see", {}).get("url"):
         want.append(cfg["see"].get("out", "artifacts/harness/see").rstrip("/") + "/")
     missing = [w for w in want if w not in gtext.splitlines()]
     if missing:
-        plan.write(gi, gtext + ("" if not gtext or gtext.endswith("\n") else "\n") + "\n".join(missing) + "\n", "ignore hook logs and screenshots")
+        plan.write(gi, gtext + ("" if not gtext or gtext.endswith("\n") else "\n") + "\n".join(missing) + "\n", "ignore hook logs, bytecode caches and screenshots")
 
     # 3. tell the user what was decided
     for c in cfg["verify"]["commands"]:

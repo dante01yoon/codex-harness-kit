@@ -89,7 +89,7 @@ Commit `.codex/` and `AGENTS.md` so everyone on the repository gets the same har
 my-app/
 ├── AGENTS.md                      # harness rules block (your own content is left as it is; only the marked block is managed)
 ├── docs/harness.md                # how the harness works in this project
-├── .gitignore                     # adds .codex/harness/logs/
+├── .gitignore                     # adds .codex/harness/logs/ and .codex/harness/__pycache__/
 └── .codex/
     ├── hooks.json                 # UserPromptSubmit and Stop -> verify.py, PreToolUse -> guard.py (existing hooks are backed up and merged)
     └── harness/
@@ -157,7 +157,7 @@ The guard reads command strings and patches. It is meant to stop a cooperative a
 ```bash
 git -C codex-harness-kit pull && python3 codex-harness-kit/install.py ~/projects/my-app   # updates the scripts, keeps harness.json
 python3 codex-harness-kit/install.py ~/projects/my-app --uninstall           # removes the hooks, the scripts and the AGENTS.md block
-python3 codex-harness-kit/install.py ~/projects/my-app --uninstall --purge   # also settings, logs, an untouched docs/harness.md and the .gitignore line
+python3 codex-harness-kit/install.py ~/projects/my-app --uninstall --purge   # also settings, logs, an untouched docs/harness.md and the .gitignore lines
 ```
 
 When a hook command changes, Codex asks you to trust it again.
